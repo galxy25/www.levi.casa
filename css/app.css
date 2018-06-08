@@ -1,0 +1,13 @@
+:root {
+    --space-jet: #191919; /* Somewhere between space gray and jet black*/
+}
+.top-bar {
+    background-color: var(--space-jet);
+}
+.top-bar ul {
+    background-color: var(--space-jet);
+}
+
+#current-date, #current-time {
+    margin-top: 15px;
+}
