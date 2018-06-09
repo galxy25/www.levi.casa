@@ -1,5 +1,5 @@
 :root {
-    --space-jet: #191919; /* Somewhere between space gray and jet black*/
+    --space-jet: #191919; /* Somewhere between space gray and jet black. */
 }
 .top-bar {
     background-color: var(--space-jet);
