@@ -1,8 +1,9 @@
 PACKAGE_DIR=src
 ROOT_PACKAGE=github.com/galxy25/levis_house
 GOPATH=$(PWD)
+export GOPATH=$(PWD)
 
-.PHONY: install build clean lint test all run stop restart docker_build docker_run
+.PHONY: install build clean lint test all run stop restart docker_build docker_run docker_tag docker_push
 
 lint :
 	echo "Linting"
@@ -32,7 +33,7 @@ all : install lint build test
 
 stop :
 	echo "Stopping web server"
-	# Need to double the $ to get the right substitution value
+	# Need to double the $$ to get the right
 	# substitution value for awk in the below command
 	# https://stackoverflow.com/questions/30445218/why-does-awk-not-work-correctly-in-a-makefile
 	ps -eax | grep '[b]in/levis_house' | awk '{ print $$1 }' | xargs kill -9
@@ -53,6 +54,16 @@ docker_stop :
 	docker ps | grep '[c]asa:latest' | awk '{ print $$1 }' | xargs docker kill
 
 docker_restart : docker_stop docker_run
+	echo "Restarting dockerized web server"
+
+docker_tag :
+	@echo "Tagging docker image casa for galxy25/www.levi.casa with tag $$VERSION"
+
+	@docker tag casa galxy25/www.levi.casa:$$VERSION
+
+docker_push :
+	echo "Pushing all tagged images for galxy25/www.levi.casa"
+	docker push galxy25/www.levi.casa
 
 clean :
 	echo "Cleaning"

@@ -8,6 +8,6 @@
     background-color: var(--space-jet);
 }
 
-#current-date, #current-time {
+.nav-totem {
     margin-top: 15px;
 }

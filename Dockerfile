@@ -14,7 +14,8 @@ ADD ./static /go/static
 # running the Makefile target of install in this repo.
 RUN go install ./...
 
-# Run the outyet command by default when the container starts.
+# Run the levis_house command by default
+# when the container starts.
 ENTRYPOINT /go/bin/levis_house
 
 # Document that the service listens on port 8081.
