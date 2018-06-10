@@ -23,6 +23,7 @@ run : build
 	echo "Running web server in background"
 	echo "Appending output to levis_house.out"
 	nohup ./bin/levis_house >> levis_house.out 2>&1 &
+	open http://localhost:8081
 
 test :
 	echo "Testing"
