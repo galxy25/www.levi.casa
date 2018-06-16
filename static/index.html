@@ -114,27 +114,27 @@
     <!-- Begin unseen footer -->
     <!-- Begin Portal Modals -->
     <!-- Begin Connect portal modal -->
-    <div id="do-connect" class="reveal large" data-reveal data-animation-in="hinge-in-from-left slow" data-animation-out="fade-out fast">
+    <div id="do-connect" class="reveal large" data-reveal data-animation-in="scale-in-up fast" data-animation-out="fade-out fast">
       <!-- Begin Connect over email section -->
       <form>
         <div class="grid-container">
           <div class="grid-x grid-padding-x">
-            <div class="large-8 cell">
+            <div class="large-8 cell" >
               <label>Send me an e-mail anonymously
-                <textarea placeholder="👋, ✍️. -👋"></textarea>
+                <textarea placeholder="👋, ✍️. -👋" id="email-connect"></textarea>
               </label>
             </div>
             <div class="large-3 cell">
               <label>Share your email address with me
-                <input type="email" placeholder="do@you.com">
+                <input type="email" placeholder="do@you.com" id="email-connect-id">
               </label>
               <div class="mailing-list-check-box">
-                <input id="SubscribeToMailingList" type="checkbox">
-                <label for="SubscribeToMailingList">Add me to the mailing list</label>
+                <input id="subscribe-to-mailing-list" type="checkbox">
+                <label for="subscribe-to-mailing-list">Add me to the mailing list</label>
               </div>
             </div>
             <div class="large-1 cell">
-              <button type="button" aria-label="Send email address input" class="success button do-connect-button">
+              <button type="button" aria-label="Send email input" class="success button do-connect-button" id="do-email-connect">
                 Send
               </button>
             </div>
@@ -146,18 +146,18 @@
       <form>
         <div class="grid-container">
           <div class="grid-x grid-padding-x">
-            <div class="large-8 cell">
+            <div class="large-8 cell" >
               <label>Send me an SMS anonymously
-                <textarea placeholder="😳🤣😘"></textarea>
+                <textarea placeholder="😳🤣😘" id="text-connect"></textarea>
               </label>
             </div>
             <div class="large-3 cell">
               <label>Share your phone number with me
-                <input type="tel" placeholder="503-771-4282">
+                <input type="tel" placeholder="503-771-4282" id="text-connect-id">
               </label>
             </div>
             <div class="large-1 cell">
-              <button type="button" aria-label="Send email address input" class="success button do-connect-button">
+              <button type="button" aria-label="Send text input" class="success button do-connect-button" id="do-text-connect">
                 Send
               </button>
             </div>

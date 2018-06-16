@@ -23,3 +23,13 @@
 .do-connect-close-button {
     margin-left: 14px;
 }
+
+#email-connect {
+    height: 106px;
+    width: 836px;
+}
+
+#text-connect {
+    height: 76px;
+    width: 836px;
+}

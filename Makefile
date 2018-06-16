@@ -7,8 +7,9 @@ export GOPATH=$(PWD)
 
 lint :
 	echo "Linting"
-	go fmt ./...
-	go vet ./...
+	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
+		go fmt; \
+		go vet *.go
 
 install :
 	echo "Installing"
@@ -17,7 +18,9 @@ install :
 
 build : install lint
 	echo "Building"
-	go install ./...
+	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
+		go get; \
+		go install
 
 run : build
 	echo "Running web server in background"
@@ -27,7 +30,8 @@ run : build
 
 test :
 	echo "Testing"
-	go test ./...
+	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
+		go test
 
 all : install lint build test
 	echo "Installing, linting, building, and testing"
@@ -68,7 +72,8 @@ docker_push :
 
 clean :
 	echo "Cleaning"
-	go clean ./...
+	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
+		go clean
 	rm -rf bin/*
 	rm -rf pkg/*
 	rm levis_house.out
