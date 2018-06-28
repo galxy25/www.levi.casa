@@ -1,9 +1,9 @@
 PACKAGE_DIR=src
-ROOT_PACKAGE=github.com/galxy25/levis_house
+ROOT_PACKAGE=github.com/galxy25/levishouse
 GOPATH=$(PWD)
 export GOPATH=$(PWD)
 
-.PHONY: install build clean lint test all run stop restart docker_build docker_run docker_tag docker_push
+.PHONY: install build clean lint test all run stop restart docker_build docker_run docker_tag docker_push docker_pull docker_serve docker_clean
 
 lint :
 	echo "Linting"
@@ -14,27 +14,29 @@ lint :
 install :
 	echo "Installing"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		dep ensure
+		dep ensure; \
+		go get;
 
-build : install lint
+build : lint
 	echo "Building"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go get; \
 		go install
+
+test : lint build
+	echo "Testing"
+	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
+		go test --race
+
+all : clean install lint build test
+	echo "Installing, linting, building, and testing"
 
 run : build
 	echo "Running web server in background"
 	echo "Appending output to levis_house.out"
-	nohup ./bin/levis_house >> levis_house.out 2>&1 &
+	DESIRED_CONNECTIONS_FILEPATH="$$(pwd)/data/desired_connections.txt" \
+	CURRENT_CONNECTIONS_FILEPATH="$$(pwd)/data/current_connections.txt" \
+	nohup ./bin/levishouse >> levis_house.out 2>&1 &
 	open http://localhost:8081
-
-test :
-	echo "Testing"
-	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go test
-
-all : install lint build test
-	echo "Installing, linting, building, and testing"
 
 stop :
 	echo "Stopping web server"
@@ -46,22 +48,22 @@ stop :
 restart : stop run
 	echo "Restarted web server"
 
-docker_build : install
+docker_build :
 	echo "Building docker image casa from latest source"
 	docker build -t casa .
 
 docker_run :
 	echo "Running docker image casa:latest"
-	docker run -d -p 8081:8081/tcp casa:latest
+	docker run -d -p 8081:8081/tcp --mount type=bind,source="$$(pwd)/data",target=/data --env-file casa.env casa:latest
 
 docker_stop :
-	echo "Stopping all containers running docker image casa:latest"
-	docker ps | grep '[c]asa:latest' | awk '{ print $$1 }' | xargs docker kill
+	echo "Stopping all containers listening on TCP socket 8081"
+	docker ps | grep '[8]081/tcp' | awk '{ print $$1 }' | xargs docker kill
 
 docker_restart : docker_stop docker_run
 	echo "Restarting dockerized web server"
 
-docker_tag :
+docker_tag : docker_build
 	@echo "Tagging docker image casa for galxy25/www.levi.casa with tag $$VERSION"
 
 	@docker tag casa galxy25/www.levi.casa:$$VERSION
@@ -70,10 +72,24 @@ docker_push :
 	echo "Pushing all tagged images for galxy25/www.levi.casa"
 	docker push galxy25/www.levi.casa
 
+docker_pull :
+	docker pull galxy25/www.levi.casa
+
+docker_clean :
+	docker rmi -f $$(docker images -qf dangling=true) & \
+	docker volume rm $$(docker volume ls -qf dangling=true)
+
+docker_serve :
+	docker run -d -p 8081:8081/tcp -v "$$(pwd)":/data --env-file casa.env galxy25/www.levi.casa:latest
+
 clean :
 	echo "Cleaning"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
 		go clean
 	rm -rf bin/*
 	rm -rf pkg/*
-	rm levis_house.out
+	rm -f levis_house.out
+	rm -f desired_connections.txt
+	rm -f current_connections.txt
+	rm -f data/desired_connections.txt
+	rm -f data/current_connections.txt
