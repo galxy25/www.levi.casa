@@ -44,12 +44,13 @@ const (
 //              leave it in the input file
 func SweepConnections(desired_connections string, current_connections string) {
 	// Read persisted connection state
-	input_file, err := os.OpenFile(desired_connections, os.O_CREATE|os.O_RDONLY, 0666)
+	input_file, err := os.OpenFile(desired_connections, os.O_RDONLY|os.O_CREATE, 0644)
 	defer input_file.Close()
 	if err != nil {
 		package_logger.WithFields(log.Fields{
 			"resource": "io/file",
 			"executor": "#SweepConnections",
+			"error":    err,
 		}).Fatal(fmt.Sprintf("Failed to open %v", desired_connections))
 		panic(err)
 	}
@@ -127,7 +128,20 @@ func SweepConnections(desired_connections string, current_connections string) {
 				}
 			}
 			sed_command := "sed"
-			sed_sweep_args := []string{"-i", fmt.Sprintf("s/%v//g", input_scanner.Text()), desired_connections}
+			current_connection := input_scanner.Text()
+			// Escape sed regex characters
+			// lazily:
+			// Put a backslash before $.*/[\]^
+			// and only those characters
+			// https://unix.stackexchange.com/questions/32907/what-characters-do-i-need-to-escape-when-using-sed-in-a-sh-script
+			// because I'm "encoding" messages
+			// into base64
+			// https://en.wikipedia.org/wiki/Base64
+			// HACK:
+			// only doing '/' for now
+			sed_safe_connection := strings.
+				Replace(current_connection, "/", "\\/", -1)
+			sed_sweep_args := []string{"-i", fmt.Sprintf("s/%v//g", sed_safe_connection), desired_connections}
 			//  Remove the realized from the desired
 			_, sweep_err := exec.Command(sed_command, sed_sweep_args...).Output()
 			if sweep_err != nil {
