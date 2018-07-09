@@ -3,7 +3,7 @@ ROOT_PACKAGE=github.com/galxy25/levishouse
 GOPATH=$(PWD)
 export GOPATH=$(PWD)
 
-.PHONY: install build clean lint test all run stop restart docker_build docker_run docker_tag docker_push docker_pull docker_serve docker_clean
+.PHONY: install build clean lint test all run stop restart rere docker_build docker_run docker_tag docker_push docker_pull docker_serve docker_clean
 
 lint :
 	echo "Linting"
@@ -25,28 +25,30 @@ build : lint
 test : lint build
 	echo "Testing"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go test --race
-
-all : clean install lint build test
-	echo "Installing, linting, building, and testing"
-
-run : build
+		go test -v -cover --race -args -test_bin_dir=$(PWD)
+run :
 	echo "Running web server in background"
 	echo "Appending output to levis_house.out"
 	DESIRED_CONNECTIONS_FILEPATH="$$(pwd)/data/desired_connections.txt" \
 	CURRENT_CONNECTIONS_FILEPATH="$$(pwd)/data/current_connections.txt" \
-	nohup ./bin/levishouse >> levis_house.out 2>&1 &
-	open http://localhost:8081
+	nohup ./bin/levishouse >> levis_house.out 2>&1 & \
+	echo "LEVISHOUSE_PID: $$!"
+
+all : clean install test run
+	echo "Installing, linting, building, testing, and running"
 
 stop :
 	echo "Stopping web server"
 	# Need to double the $$ to get the right
 	# substitution value for awk in the below command
 	# https://stackoverflow.com/questions/30445218/why-does-awk-not-work-correctly-in-a-makefile
-	ps -eax | grep '[b]in/levis_house' | awk '{ print $$1 }' | xargs kill -9
+	ps -eax | grep '[b]in/levishouse' | awk '{ print $$1 }' | xargs kill -9
 
 restart : stop run
 	echo "Restarted web server"
+# restart & rebuild
+rere : stop build run
+	echo "Rebuilding and restarting web server"
 
 docker_build :
 	echo "Building docker image casa from latest source"
@@ -61,7 +63,7 @@ docker_stop :
 	docker ps | grep '[8]081/tcp' | awk '{ print $$1 }' | xargs docker kill
 
 docker_restart : docker_stop docker_run
-	echo "Restarting dockerized web server"
+	echo "Restarting web server image"
 
 docker_tag : docker_build
 	@echo "Tagging docker image casa for galxy25/www.levi.casa with tag $$VERSION"
@@ -89,7 +91,5 @@ clean :
 	rm -rf bin/*
 	rm -rf pkg/*
 	rm -f levis_house.out
-	rm -f desired_connections.txt
-	rm -f current_connections.txt
 	rm -f data/desired_connections.txt
 	rm -f data/current_connections.txt

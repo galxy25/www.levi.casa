@@ -162,8 +162,9 @@ func SweepConnections(desired_connections string, current_connections string) {
 				}).Info(fmt.Sprintf("Sweeped! connection | %v", input_scanner.Text()))
 			}
 		}
-		// Wait waits until the command(grep'ing for a matching desired and current connection)
-		// finishes cleanly and ensures close
+		// Wait waits until the grep command
+		// for a matching desired and current connection
+		// finishes cleanly and ensures
 		// closure of any pipes siphoning from it's output.
 		err = cmd.Wait()
 		if err != nil {
@@ -249,6 +250,14 @@ func Connect(desired_connections string, current_connections string) {
 			wait_group.Add(1)
 		}
 	}
+	// chronically cellularize TPS
+	// HACK: Sleep 1-5 minutes
+	// n number stream consumers
+	// TODO: batch and rate limited connection endpoint
+	// (cron + uniq + |)
+	// or
+	// (cloudwatchevents + lambda + dynamo)
+	// versus naive clock limited TPS impl
 	wait_group.Wait()
 }
 

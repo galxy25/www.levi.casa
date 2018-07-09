@@ -210,7 +210,8 @@ func main() {
 			// cheap local storage
 			// over
 			// metered requests and bandwidth
-			// TODO: Add a sleep here
+			// TODO: Add a bounded
+			// 60s back off sleep here
 		}
 	}()
 	// Engage and Segment audience
