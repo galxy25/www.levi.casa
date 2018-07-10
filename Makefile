@@ -26,6 +26,14 @@ test : lint build
 	echo "Testing"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
 		go test -v -cover --race -args -test_bin_dir=$(PWD)
+
+doc :
+	echo "Backgrounding godoc server at http://localhost:2022"
+	nohup godoc -http=:2022 >> godoc.out 2>&1 &
+	echo "Doc yourself, before you wreck yourself:"
+	echo "open http://127.0.0.1:2022/pkg/github.com/galxy25/levishouse/"
+	echo "open http://127.0.0.1:2022/pkg/github.com/galxy25/levishouse/internal/?m=all"
+
 run :
 	echo "Running web server in background"
 	echo "Appending output to levis_house.out"
@@ -34,8 +42,8 @@ run :
 	nohup ./bin/levishouse >> levis_house.out 2>&1 & \
 	echo "LEVISHOUSE_PID: $$!"
 
-all : clean install test run
-	echo "Installing, linting, building, testing, and running"
+all : clean install test doc run
+	echo "Installing, linting, building, testing, doc'ing, running"
 
 stop :
 	echo "Stopping web server"
@@ -46,6 +54,7 @@ stop :
 
 restart : stop run
 	echo "Restarted web server"
+
 # restart & rebuild
 rere : stop build run
 	echo "Rebuilding and restarting web server"
@@ -91,5 +100,6 @@ clean :
 	rm -rf bin/*
 	rm -rf pkg/*
 	rm -f levis_house.out
+	rm -f godoc.out
 	rm -f data/desired_connections.txt
 	rm -f data/current_connections.txt
