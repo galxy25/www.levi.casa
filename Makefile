@@ -3,7 +3,7 @@ ROOT_PACKAGE=github.com/galxy25/levishouse
 GOPATH=$(PWD)
 export GOPATH=$(PWD)
 
-.PHONY: install build clean lint test all run stop restart rere docker_build docker_run docker_tag docker_push docker_pull docker_serve docker_clean
+.PHONY: install build clean lint test all start run stop restart rere docker_build docker_run docker_tag docker_push docker_pull docker_serve docker_clean
 
 lint :
 	echo "Linting"
@@ -34,17 +34,6 @@ doc :
 	echo "open http://127.0.0.1:2022/pkg/github.com/galxy25/levishouse/"
 	echo "open http://127.0.0.1:2022/pkg/github.com/galxy25/levishouse/internal/?m=all"
 
-run :
-	echo "Running web server in background"
-	echo "Appending output to levis_house.out"
-	DESIRED_CONNECTIONS_FILEPATH="$$(pwd)/data/desired_connections.txt" \
-	CURRENT_CONNECTIONS_FILEPATH="$$(pwd)/data/current_connections.txt" \
-	nohup ./bin/levishouse >> levis_house.out 2>&1 & \
-	echo "LEVISHOUSE_PID: $$!"
-
-all : clean install test doc run
-	echo "Installing, linting, building, testing, doc'ing, running"
-
 stop :
 	echo "Stopping web server"
 	# Need to double the $$ to get the right
@@ -52,11 +41,20 @@ stop :
 	# https://stackoverflow.com/questions/30445218/why-does-awk-not-work-correctly-in-a-makefile
 	ps -eax | grep '[b]in/levishouse' | awk '{ print $$1 }' | xargs kill -9
 
-restart : stop run
-	echo "Restarted web server"
+start :
+	echo "Running web server in background"
+	echo "Appending output to levis_house.out"
+	DESIRED_CONNECTIONS_FILEPATH="$$(pwd)/data/desired_connections.txt" \
+	CURRENT_CONNECTIONS_FILEPATH="$$(pwd)/data/current_connections.txt" \
+	nohup ./bin/levishouse >> levis_house.out 2>&1 & \
+	echo "LEVISHOUSE_PID: $$!"
 
-# restart & rebuild
-rere : stop build run
+run : build start
+
+restart : stop start
+
+# i.e. rebuild & restart
+rere : stop run
 	echo "Rebuilding and restarting web server"
 
 docker_build :
@@ -103,3 +101,6 @@ clean :
 	rm -f godoc.out
 	rm -f data/desired_connections.txt
 	rm -f data/current_connections.txt
+
+all : clean install test doc restart
+	echo "Installing, linting, building, testing, doc'ing, restarting"

@@ -1,10 +1,10 @@
 package internal
 
-import ()
+import ( /*👏🏾🔙*/ )
 
 // A TestProcess is-a process
 // intended to be executed by some
-// `func TestFoo(){...}
+// `func TestFoo(t *testing.T) {...}
 // as part of a
 // `go test` invocation
 type TestProcess struct {
@@ -20,26 +20,28 @@ type TestableProcess interface {
 	HealthCheck() (healthy bool, err error) //Monitor
 }
 
-// ExecuteTestProcess starts a testable process
-// and returns the executed process and start error(if any)
+// ExecuteTestProcess executes a testable process
+// and returns the executed test process
+// (which may not be running)
+// and any execution error
 func ExecuteTestProcess(t TestableProcess) (tp *TestProcess, err error) {
+	tp = &TestProcess{t}
 	err = t.Start()
-	return &TestProcess{t}, err
+	if err != nil {
+		return tp, err
+	}
+	// TODO:
+	// Refactor up/out/obviate
+	// timeout and retry abilities
+	// from implementors of TestableProcess
+	_, err = t.HealthCheck()
+	return tp, err
 }
 
-// VerifyHealthy verifies the given TestProcess is healthy
-// as defined by it's monitoring function
-// TODO:
-// Add timeout and retry ability
-func (t *TestProcess) VerifyHealthy() (healthy bool, err error) {
-	healthy, err = t.HealthCheck()
-	return healthy, err
-}
-
-// VerifiedStoped stops and verifies the given TestProcess as stopped
-// returning an error if the TestProcess was not already running
-// TODO:
-// Add timeout and retry ability
-func (t *TestProcess) VerifiedStoped() (err error) {
+// Stop attempts to stop the TestProcess
+// returning any error encountered stopping the process
+func (t *TestProcess) Terminate() (err error) {
+	// TODO:
+	// Add timeout and retry ability
 	return t.Stop()
 }

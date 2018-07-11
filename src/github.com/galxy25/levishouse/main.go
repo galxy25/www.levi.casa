@@ -22,6 +22,9 @@ import (
 // Default anonymous user token, e.g a token's antonym
 const ANON_TOKER = "antonym"
 
+// Affirmative response to a health check
+const HEALTH_CHECK_OK = "pong"
+
 // IsEmpty returns bool as to whether string s is empty.
 // TODO extract common library:levisutils
 // NOT re-writing this for ever package!
@@ -75,7 +78,8 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	// Let the interested party know
 	// we're still
 	// alive and kicking...it
-	w.Write([]byte("pong"))
+	// TODO: Implement a real health check
+	w.Write([]byte(HEALTH_CHECK_OK))
 }
 
 // connect processes a clients
