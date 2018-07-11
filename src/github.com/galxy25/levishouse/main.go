@@ -25,9 +25,14 @@ const ANON_TOKER = "antonym"
 // Affirmative response to a health check
 const HEALTH_CHECK_OK = "pong"
 
+var ENDPOINTS = map[string]string{
+	"BASE":    "/",
+	"HEALTH":  "/ping",
+	"CONNECT": "/connect",
+}
+
 // IsEmpty returns bool as to whether string s is empty.
-// TODO extract common library:levisutils
-// NOT re-writing this for ever package!
+// TODO: extract => levisutils
 func IsEmpty(s *string) (empty bool) {
 	return *s == ""
 }
@@ -42,6 +47,8 @@ var DESIRED_CONNECTIONS_FILEPATH = os.Getenv("DESIRED_CONNECTIONS_FILEPATH")
 
 // File path where current connection data is stored
 var CURRENT_CONNECTIONS_FILEPATH = os.Getenv("CURRENT_CONNECTIONS_FILEPATH")
+
+// Purposes and paths of exposed endpoints
 
 // Configure package logging context
 var package_logger = log.WithFields(log.Fields{
@@ -165,11 +172,11 @@ func loggingHandler(h http.Handler) http.Handler {
 func main() {
 	httpd := http.NewServeMux()
 	// Serve web files in the static directory
-	httpd.Handle("/", http.FileServer(http.Dir("./static")))
+	httpd.Handle(ENDPOINTS["BASE"], http.FileServer(http.Dir("./static")))
 	// Expose a health check endpoint
-	httpd.HandleFunc("/ping", ping)
+	httpd.HandleFunc(ENDPOINTS["HEALTH"], ping)
 	// Expose an endpoint for connect requests
-	httpd.HandleFunc("/connect", connect)
+	httpd.HandleFunc(ENDPOINTS["CONNECT"], connect)
 	// Start the connection reconciliation service
 	// for ensuring
 	// with the monotonic progression of time and loop iterations

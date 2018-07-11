@@ -23,7 +23,9 @@ var test_bin_dir = flag.String("test_bin_dir", "", "Dir of executables for use b
 // executed as part of integration testing
 type LevishouseTestProcess struct {
 	test_context *testing.T //Interface to a `go test` invocation
-	pid          int
+	pid          int        // Unique runtime identifier for this process
+	host_name    string     // Name of the host for this process
+	host_port    int        // Host port used by this process
 }
 
 // Start starts a test instance of levishouse
@@ -49,10 +51,15 @@ func (l *LevishouseTestProcess) Start() (err error) {
 	// HACK: `make restart` returns
 	// echo "LEVISHOUSE_PID: $$!"
 	// as it's last line of output
+	// TODO: use losf -i :`l.host_port` to get
+	// the pid of `l` we launched to listen on `l.host_port`
 	l.test_context.Logf("Run output: %v", string(out))
 	sliced_output := strings.Split(string(out), "LEVISHOUSE_PID:")
 	string_pid := strings.TrimSpace(strings.Split(sliced_output[len(sliced_output)-1], " ")[1])
+	// Set runtime values
 	l.pid, err = strconv.Atoi(string_pid)
+	l.host_port = 8081
+	l.host_name = "localhost"
 	if err != nil {
 		l.test_context.Logf("Failed to convert %v to int", string_pid)
 		return err
@@ -64,6 +71,7 @@ func (l *LevishouseTestProcess) Start() (err error) {
 // Stop stops a test instance of levishouse
 // returning any error associated with the stop
 func (l *LevishouseTestProcess) Stop() (err error) {
+	// Check the process is still running
 	// On *nix systems, always succeeds
 	// so discard error
 	levishouse, _ := os.FindProcess(l.pid)
@@ -77,6 +85,7 @@ func (l *LevishouseTestProcess) Stop() (err error) {
 		l.test_context.Log("kill -s 0 on levishouse returned non nil, unable to stop non-running server.")
 		return errors.New("kill -s 0 on levishouse returned non nil, unable to stop non-running server.")
 	}
+	// Stop the process
 	stop_cmd := exec.Command("sh", "-c", fmt.Sprintf("make stop -f %v/Makefile -C %v", *test_bin_dir, *test_bin_dir))
 	out, err := stop_cmd.CombinedOutput()
 	if err != nil {
@@ -84,7 +93,9 @@ func (l *LevishouseTestProcess) Stop() (err error) {
 		return err
 	}
 	l.test_context.Logf("Stop output: %v", string(out))
+	// Verify the process is stopped
 	stop_response := levishouse.Signal(syscall.Signal(0))
+	// TODO: Extract retry logic to TestableProcess
 	for stop_response == nil {
 		time.Sleep(1 * time.Millisecond)
 		// TODO: Don't loop longer than
@@ -109,10 +120,11 @@ func (l *LevishouseTestProcess) HealthCheck() (healthy bool, err error) {
 	// Pessimistic assumption of
 	// sick until proven healthy!
 	healthy = false
-	health_check_endpoint := "http://127.0.0.1:8081/ping"
 	// Call the health endpoint to verify
 	// it is running
+	health_check_endpoint := l.endpoint("HEALTH")
 	resp, err := http.Get(health_check_endpoint)
+	// TODO: Extract timeout and retry logic to TestableProcess
 	tries := 10
 	for err != nil && tries > 1 {
 		resp, err = http.Get(health_check_endpoint)
@@ -124,6 +136,7 @@ func (l *LevishouseTestProcess) HealthCheck() (healthy bool, err error) {
 		l.test_context.Logf("Unable to ping levishouse: %v \n", err)
 		return healthy, err
 	}
+	// Parse health check response
 	ping_resp, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
@@ -131,10 +144,25 @@ func (l *LevishouseTestProcess) HealthCheck() (healthy bool, err error) {
 		return healthy, err
 	}
 	l.test_context.Logf("Ping response from levishouse: %v \n", string(ping_resp))
+	// Check health check response
 	if string(ping_resp) == HEALTH_CHECK_OK {
 		healthy = true
 	}
 	return healthy, err
+}
+
+// host_address returns the network address of the
+// host running the levishouse test process
+func (l *LevishouseTestProcess) host_address() (address string) {
+	address = fmt.Sprintf("%v:%v", l.host_name, l.host_port)
+	return address
+}
+
+// endpoint returns the network endpoint for the provided method
+// exposed by the running levishouse test process
+func (l *LevishouseTestProcess) endpoint(method string) (endpoint string) {
+	endpoint = fmt.Sprintf("http://%v%v", l.host_address(), ENDPOINTS[method])
+	return endpoint
 }
 
 // Blackest of black box testing:
@@ -155,5 +183,19 @@ func TestItRunsAndStops(t *testing.T) {
 // E2E integration test
 // desired_connection -> levishouse => connection
 func TestLevishouseMakesEmailConnections(t *testing.T) {
+	// Start levishouse
+	// Construct connection to make
+	// Send connection to CONNECT endpoint
+	// Parse response
+	// Verify response is 200
+	// Verify connection is in Mailbox/ConnectBox
+	// Stop levishouse
+}
+
+func TestLevishouseSweepsMadeEmailConnections(t *testing.T) {
+
+}
+
+func TestLevishouseLogsMadeEmailConnections(t *testing.T) {
 
 }
