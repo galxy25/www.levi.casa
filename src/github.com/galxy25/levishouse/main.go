@@ -11,6 +11,7 @@ import (
 	tell "github.com/galxy25/levishouse/tell"
 	xip "github.com/galxy25/levishouse/xip"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -25,10 +26,21 @@ const ANON_TOKER = "antonym"
 // Affirmative response to a health check
 const HEALTH_CHECK_OK = "pong"
 
-var ENDPOINTS = map[string]string{
-	"BASE":    "/",
-	"HEALTH":  "/ping",
-	"CONNECT": "/connect",
+// List of HTTP endpoints exposed
+// via levishouse
+var ENDPOINTS = map[string]Endpoint{
+	"BASE": Endpoint{
+		Path: "/",
+		Verb: "GET"},
+	"HEALTH": Endpoint{
+		Path: "/ping",
+		Verb: "GET"},
+	"CONNECT": Endpoint{
+		Path: "/connect",
+		Verb: "POST"},
+	"INBOX  ": Endpoint{
+		Path: "/inbox",
+		Verb: "GET"},
 }
 
 // IsEmpty returns bool as to whether string s is empty.
@@ -73,8 +85,23 @@ func init() {
 
 // --- END INIT ---
 // --- BEGIN Data ---
+// TODO: Investigate if there is a way
+// to codegen this client/server boilerplate
+// swagger mayhaps?
+
+// Endpoint represents an HTTP endpoint
+// exposed and serviced by levishouse
+type Endpoint struct {
+	Path, Verb string
+}
+
+// Response represents an HTTP response
+// returned by a call to a levishouse endpoint
 type Response struct {
-	Message string `json:"message"`
+	Message    string        `json:"message"`
+	StatusCode int           `json:"status_code"`
+	Error      string        `json:"error"`
+	Data       io.ReadCloser `json:"data"`
 }
 
 // --- END Data ---
@@ -136,7 +163,11 @@ func connect(w http.ResponseWriter, r *http.Request) {
 	}
 	// Return to the user success in
 	// persisting the desired connection
-	response := &Response{Message: "Connection initiated"}
+	response := &Response{
+		Message: "Connection initiated"}
+	data_bytes := new(bytes.Buffer)
+	json.NewEncoder(data_bytes).Encode(email_connection)
+	response.Data = ioutil.NopCloser(data_bytes)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(response)
@@ -172,11 +203,11 @@ func loggingHandler(h http.Handler) http.Handler {
 func main() {
 	httpd := http.NewServeMux()
 	// Serve web files in the static directory
-	httpd.Handle(ENDPOINTS["BASE"], http.FileServer(http.Dir("./static")))
+	httpd.Handle(ENDPOINTS["BASE"].Path, http.FileServer(http.Dir("./static")))
 	// Expose a health check endpoint
-	httpd.HandleFunc(ENDPOINTS["HEALTH"], ping)
+	httpd.HandleFunc(ENDPOINTS["HEALTH"].Path, ping)
 	// Expose an endpoint for connect requests
-	httpd.HandleFunc(ENDPOINTS["CONNECT"], connect)
+	httpd.HandleFunc(ENDPOINTS["CONNECT"].Path, connect)
 	// Start the connection reconciliation service
 	// for ensuring
 	// with the monotonic progression of time and loop iterations

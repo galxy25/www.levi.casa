@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	helper "github.com/galxy25/levishouse/internal/test"
+	xip "github.com/galxy25/levishouse/xip"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -22,7 +25,7 @@ var test_bin_dir = flag.String("test_bin_dir", "", "Dir of executables for use b
 // An instance of the levishouse process
 // executed as part of integration testing
 type LevishouseTestProcess struct {
-	test_context *testing.T //Interface to a `go test` invocation
+	test_context *testing.T // Interface to a `go test` invocation
 	pid          int        // Unique runtime identifier for this process
 	host_name    string     // Name of the host for this process
 	host_port    int        // Host port used by this process
@@ -122,7 +125,7 @@ func (l *LevishouseTestProcess) HealthCheck() (healthy bool, err error) {
 	healthy = false
 	// Call the health endpoint to verify
 	// it is running
-	health_check_endpoint := l.endpoint("HEALTH")
+	health_check_endpoint := l.endpoint_uri(ENDPOINTS["HEALTH"])
 	resp, err := http.Get(health_check_endpoint)
 	// TODO: Extract timeout and retry logic to TestableProcess
 	tries := 10
@@ -151,6 +154,30 @@ func (l *LevishouseTestProcess) HealthCheck() (healthy bool, err error) {
 	return healthy, err
 }
 
+func (l *LevishouseTestProcess) Call(method string, body interface{}) (response interface{}, err error) {
+	response, err = l.client(ENDPOINTS[method], body)
+	return response, err
+}
+
+func (l *LevishouseTestProcess) client(endpoint Endpoint, body interface{}) (response Response, err error) {
+	call_path := l.endpoint_uri(endpoint)
+	switch endpoint.Verb {
+	case "GET":
+		resp, err := http.Get(call_path)
+		json.NewDecoder(resp.Body).Decode(&response)
+		return response, err
+	case "POST":
+		body_bytes := new(bytes.Buffer)
+		json.NewEncoder(body_bytes).Encode(body)
+		encoded_body := ioutil.NopCloser(body_bytes)
+		resp, err := http.Post(call_path, "application/json", encoded_body)
+		json.NewDecoder(resp.Body).Decode(&response)
+		return response, err
+	default:
+		return response, err
+	}
+}
+
 // host_address returns the network address of the
 // host running the levishouse test process
 func (l *LevishouseTestProcess) host_address() (address string) {
@@ -158,11 +185,11 @@ func (l *LevishouseTestProcess) host_address() (address string) {
 	return address
 }
 
-// endpoint returns the network endpoint for the provided method
-// exposed by the running levishouse test process
-func (l *LevishouseTestProcess) endpoint(method string) (endpoint string) {
-	endpoint = fmt.Sprintf("http://%v%v", l.host_address(), ENDPOINTS[method])
-	return endpoint
+// endpoint_uri returns the network URI
+// exposed by the running levishouse for the provided endpoint
+func (l *LevishouseTestProcess) endpoint_uri(endpoint Endpoint) (endpoint_uri string) {
+	endpoint_uri = fmt.Sprintf("http://%v%v", l.host_address(), endpoint.Path)
+	return endpoint_uri
 }
 
 // Blackest of black box testing:
@@ -180,22 +207,48 @@ func TestItRunsAndStops(t *testing.T) {
 	}
 }
 
+// castToResponse casts any interface to
+// type Response, the format used for valid
+// levihouse's responses.
+func castToResponse(anyInterface interface{}) (cast_response Response) {
+	cast_response, _ = anyInterface.(Response)
+	return cast_response
+}
+
 // E2E integration test
-// desired_connection -> levishouse => connection
+// connection -> levishouse => connected
 func TestLevishouseMakesEmailConnections(t *testing.T) {
-	// Start levishouse
+	test_house := LevishouseTestProcess{test_context: t}
+	house_under_test, _ := helper.ExecuteTestProcess(&test_house)
+	defer house_under_test.Terminate()
 	// Construct connection to make
-	// Send connection to CONNECT endpoint
-	// Parse response
-	// Verify response is 200
-	// Verify connection is in Mailbox/ConnectBox
-	// Stop levishouse
-}
-
-func TestLevishouseSweepsMadeEmailConnections(t *testing.T) {
-
-}
-
-func TestLevishouseLogsMadeEmailConnections(t *testing.T) {
-
+	connection := xip.EmailConnect{
+		EmailConnect:           "Salutations,Body,Farewell",
+		EmailConnectId:         "tester@test.com",
+		SubscribeToMailingList: false,
+	}
+	// Send connection to levishouse
+	resp, err := house_under_test.Call("CONNECT", connection)
+	if err != nil {
+		t.Fatalf("%v\nFailed to initiate connection %v\n%v\n", err, connection, resp)
+	}
+	// // Get the current list of connections
+	// resp, err = house_under_test.Call("INBOX", nil)
+	// var connections xip.Connections
+	// json.NewDecoder(castToResponse(resp).Data).Decode(&connections)
+	// t.Log(connections)
+	// if err != nil {
+	// 	t.Fatalf("Failed to get list of connections: %v\n", err)
+	// }
+	// // Verify test connection registered
+	// match := false
+	// for connected := range connections {
+	// 	if connected.EmailConnectId == connection.EmailConnectId && connected.EmailConnect == connection.EmailConnect {
+	// 		match = true
+	// 		break
+	// 	}
+	// }
+	// if !match {
+	// 	t.Fatalf("Test connection %v \n not present in list of connections %v ", connection, connections)
+	// }
 }

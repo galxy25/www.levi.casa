@@ -18,3 +18,9 @@ type EmailConnect struct {
 	// Time message was sent to the receiver
 	ConnectEpoch string `json:connect_epoch`
 }
+
+// Connections is the XIP for
+// collections of EmailConnect's
+type Connections struct {
+	EmailConnections []EmailConnect `json:"email_connections"`
+}

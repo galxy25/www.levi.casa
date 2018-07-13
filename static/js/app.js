@@ -109,7 +109,7 @@ function do_connect(trigger_element) {
         alert(`Failed: ${JSON.stringify(data)}`);
     }
 }
-// Make an AJAX call to the desired backend
+// Make an AJAX call to the desired backend endpoint
 // with the specified data and event handlers
 function call_backend(url, method, data, data_type, on_success, on_error){
     if(data_type === 'json'){

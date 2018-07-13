@@ -12,12 +12,13 @@ type TestProcess struct {
 }
 
 // TestableProcess is the interface for
-// starting, stopping, and monitoring a
+// starting, stopping, calling and monitoring a
 // process that is intended to be used as part of a test
 type TestableProcess interface {
-	Start() (err error)                     //Constructor
-	Stop() (err error)                      //De-constructor
-	HealthCheck() (healthy bool, err error) //Monitor
+	Start() (err error) // Constructor
+	Stop() (err error)  // De-constructor
+	HealthCheck() (healthy bool, err error)
+	Call(method string, body interface{}) (response interface{}, err error) // {f = method, x = body ; f(x)}
 }
 
 // ExecuteTestProcess executes a testable process

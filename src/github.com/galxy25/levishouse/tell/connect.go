@@ -294,7 +294,7 @@ func doEmailConnect(email_connection xip.EmailConnect, current_connections strin
 		// to get the Code and Message from an error.
 		package_logger.WithFields(log.Fields{
 			"executor":           "#doEmailConnect.sns.#Publish",
-			"command_parameters": email_connection,
+			"command_parameters": params,
 			"error":              err.Error(),
 		}).Error("Error making email connection")
 		return
