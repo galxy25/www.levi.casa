@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -142,6 +143,9 @@ func SweepConnections(desired_connections string, current_connections string) {
 			sed_safe_connection := strings.
 				Replace(current_connection, "/", "\\/", -1)
 			sed_sweep_args := []string{"-i", fmt.Sprintf("s/%v//g", sed_safe_connection), desired_connections}
+			if runtime.GOOS == "darwin" {
+				sed_sweep_args = []string{"-i", "", fmt.Sprintf("s/%v//g", sed_safe_connection), desired_connections}
+			}
 			//  Remove the realized from the desired
 			_, sweep_err := exec.Command(sed_command, sed_sweep_args...).Output()
 			if sweep_err != nil {
@@ -219,25 +223,10 @@ func Connect(desired_connections string, current_connections string) {
 		if current_line == "" {
 			continue
 		} else {
-			// Read persisted connection
-			// into an EmailConnection interface
-			// TODO, add this as an interface method
-			persisted_connection := strings.Split(current_line, " ")
-			fmt.Printf("Persisted connection: %v \n", persisted_connection)
-			// HACKs to stop runtime panics
-			// due to blindly reading any garbage line in desired
-			// as a valid
-			// TODO: Refactor into new Interface error for an EmailConnection{}
-			if len(persisted_connection) < 3 {
+			connection, err := xip.EmailConnectFromString(current_line)
+			if err != nil {
 				continue
 			}
-			decoded_message, _ := base64.StdEncoding.DecodeString(persisted_connection[1])
-			mailing_list_subscriber, _ := strconv.ParseBool(persisted_connection[2])
-			connection := xip.EmailConnect{
-				EmailConnectId:         strings.Split(persisted_connection[0], ":sky")[0],
-				EmailConnect:           string(decoded_message),
-				SubscribeToMailingList: mailing_list_subscriber,
-				ReceiveEpoch:           persisted_connection[3]}
 			package_logger.WithFields(log.Fields{
 				"executor": "#Connect",
 				"resource": "io/channel",
@@ -275,7 +264,7 @@ var toker = os.Getenv("TOKER")
 
 // --- BEGIN Library ---
 // doEmailConnect makes email connections by sending me an email via AWS SNS
-func doEmailConnect(email_connection xip.EmailConnect, current_connections string, wait_group *sync.WaitGroup) {
+func doEmailConnect(email_connection *xip.EmailConnect, current_connections string, wait_group *sync.WaitGroup) {
 	defer wait_group.Done()
 	package_logger.WithFields(log.Fields{
 		"executor":           "#doEmailConnect",
@@ -316,7 +305,7 @@ func doEmailConnect(email_connection xip.EmailConnect, current_connections strin
 
 // soEmailConnect does the things we do after an email connection
 // answering the question: "You made an email connection. So what?"
-func soEmailConnect(current_connection xip.EmailConnect, current_connections string) {
+func soEmailConnect(current_connection *xip.EmailConnect, current_connections string) {
 	// Acquire connection publishing appendix
 	in_file, err := os.OpenFile(current_connections, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	defer in_file.Close()

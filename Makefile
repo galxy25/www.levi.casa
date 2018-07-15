@@ -1,3 +1,5 @@
+include Envfile
+export $(shell sed 's/=.*//' Envfile)
 PACKAGE_DIR=src
 ROOT_PACKAGE=github.com/galxy25/levishouse
 GOPATH=$(PWD)
@@ -44,8 +46,6 @@ stop :
 start :
 	echo "Running web server in background"
 	echo "Appending output to levis_house.out"
-	DESIRED_CONNECTIONS_FILEPATH="$$(pwd)/data/desired_connections.txt" \
-	CURRENT_CONNECTIONS_FILEPATH="$$(pwd)/data/current_connections.txt" \
 	nohup ./bin/levishouse >> levis_house.out 2>&1 & \
 	echo "LEVISHOUSE_PID: $$!"
 
@@ -63,7 +63,7 @@ docker_build :
 
 docker_run :
 	echo "Running docker image casa:latest"
-	docker run -d -p 8081:8081/tcp --mount type=bind,source="$$(pwd)/data",target=/data --env-file casa.env casa:latest
+	docker run -d -p $$CASA_PORT:$$CASA_PORT/tcp --mount type=bind,source="$$(pwd)/data",target=/go/data --env-file Envfile -e AWS_DEFAULT_REGION=$$AWS_DEFAULT_REGION -e AWS_ACCESS_KEY_ID=$$AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$$AWS_SECRET_ACCESS_KEY casa:latest
 
 docker_stop :
 	echo "Stopping all containers listening on TCP socket 8081"
@@ -74,7 +74,6 @@ docker_restart : docker_stop docker_run
 
 docker_tag : docker_build
 	@echo "Tagging docker image casa for galxy25/www.levi.casa with tag $$VERSION"
-
 	@docker tag casa galxy25/www.levi.casa:$$VERSION
 
 docker_push :
@@ -89,7 +88,7 @@ docker_clean :
 	docker volume rm $$(docker volume ls -qf dangling=true)
 
 docker_serve :
-	docker run -d -p 8081:8081/tcp -v "$$(pwd)":/data --env-file casa.env galxy25/www.levi.casa:latest
+	docker run -d -p $$CASA_PORT:$$CASA_PORT/tcp -v "$$(pwd)":/data --env-file Envfile galxy25/www.levi.casa:latest
 
 clean :
 	echo "Cleaning"
@@ -99,8 +98,7 @@ clean :
 	rm -rf pkg/*
 	rm -f levis_house.out
 	rm -f godoc.out
-	rm -f data/desired_connections.txt
-	rm -f data/current_connections.txt
+	rm -f data/*
 
-all : clean install test doc restart
-	echo "Installing, linting, building, testing, doc'ing, restarting"
+all : clean install test doc start
+	echo "Installing, linting, building, testing, doc'ing, starting"

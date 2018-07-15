@@ -34,17 +34,11 @@ type LevishouseTestProcess struct {
 // Start starts a test instance of levishouse
 // returning any error associated with the start
 func (l *LevishouseTestProcess) Start() (err error) {
-	// HACK:
-	// We ensure the server is stopped before
-	// running one to test as otherwise
+	// Ensure other levihouse processes are stopped
+	// running before testing a new one as otherwise
 	// we could fail to start our test server
 	// yet still get a healthy response from
 	// a previous instance
-	// TODO:
-	// flag/variable-ize web server port
-	// get a free port
-	// https://github.com/phayes/freeport/blob/master/freeport.go#L9
-	// run and test against selected free port
 	run_cmd := exec.Command("sh", "-c", fmt.Sprintf("make restart -f %v/Makefile -C %v", *test_bin_dir, *test_bin_dir))
 	out, err := run_cmd.CombinedOutput()
 	if err != nil {
@@ -61,7 +55,7 @@ func (l *LevishouseTestProcess) Start() (err error) {
 	string_pid := strings.TrimSpace(strings.Split(sliced_output[len(sliced_output)-1], " ")[1])
 	// Set runtime values
 	l.pid, err = strconv.Atoi(string_pid)
-	l.host_port = 8081
+	l.host_port = home_port
 	l.host_name = "localhost"
 	if err != nil {
 		l.test_context.Logf("Failed to convert %v to int", string_pid)
@@ -125,12 +119,11 @@ func (l *LevishouseTestProcess) HealthCheck() (healthy bool, err error) {
 	healthy = false
 	// Call the health endpoint to verify
 	// it is running
-	health_check_endpoint := l.endpoint_uri(ENDPOINTS["HEALTH"])
-	resp, err := http.Get(health_check_endpoint)
+	resp, err := l.Call("HEALTH", nil)
 	// TODO: Extract timeout and retry logic to TestableProcess
 	tries := 10
-	for err != nil && tries > 1 {
-		resp, err = http.Get(health_check_endpoint)
+	for err != nil && tries > 0 {
+		resp, err = l.Call("HEALTH", nil)
 		tries--
 		l.test_context.Logf("Health check retries left: %v", tries)
 		time.Sleep(10 * time.Millisecond)
@@ -140,22 +133,23 @@ func (l *LevishouseTestProcess) HealthCheck() (healthy bool, err error) {
 		return healthy, err
 	}
 	// Parse health check response
-	ping_resp, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		l.test_context.Logf("Unable to parse ping response: %v \n", resp)
-		return healthy, err
-	}
-	l.test_context.Logf("Ping response from levishouse: %v \n", string(ping_resp))
+	ping_resp := castToResponse(resp)
+	l.test_context.Logf("Ping response from levishouse: %v \n", ping_resp)
 	// Check health check response
-	if string(ping_resp) == HEALTH_CHECK_OK {
+	if ping_resp.Message == HEALTH_CHECK_OK && ping_resp.StatusCode == http.StatusOK {
 		healthy = true
 	}
 	return healthy, err
 }
 
+// Call calls a levishouse process
+// returning the call response and error
 func (l *LevishouseTestProcess) Call(method string, body interface{}) (response interface{}, err error) {
-	response, err = l.client(ENDPOINTS[method], body)
+	endpoint, exists := ENDPOINTS[method]
+	if !exists {
+		return response, errors.New(fmt.Sprintf("No matching endpoint found for method: %v\n Valid endpoints are: %v\n", method, ENDPOINTS))
+	}
+	response, err = l.client(endpoint, body)
 	return response, err
 }
 
@@ -164,6 +158,9 @@ func (l *LevishouseTestProcess) client(endpoint Endpoint, body interface{}) (res
 	switch endpoint.Verb {
 	case "GET":
 		resp, err := http.Get(call_path)
+		if err != nil {
+			return response, err
+		}
 		json.NewDecoder(resp.Body).Decode(&response)
 		return response, err
 	case "POST":
@@ -171,6 +168,9 @@ func (l *LevishouseTestProcess) client(endpoint Endpoint, body interface{}) (res
 		json.NewEncoder(body_bytes).Encode(body)
 		encoded_body := ioutil.NopCloser(body_bytes)
 		resp, err := http.Post(call_path, "application/json", encoded_body)
+		if err != nil {
+			return response, err
+		}
 		json.NewDecoder(resp.Body).Decode(&response)
 		return response, err
 	default:
@@ -192,6 +192,14 @@ func (l *LevishouseTestProcess) endpoint_uri(endpoint Endpoint) (endpoint_uri st
 	return endpoint_uri
 }
 
+// castToResponse casts any interface to
+// type Response, the format used for valid
+// levihouse's responses.
+func castToResponse(anyInterface interface{}) (cast_response Response) {
+	cast_response, _ = anyInterface.(Response)
+	return cast_response
+}
+
 // Blackest of black box testing:
 // "Is the power light on?"
 // "Is the power light off?"
@@ -205,14 +213,6 @@ func TestItRunsAndStops(t *testing.T) {
 	if stop_error != nil {
 		t.Fatalf("Failed to stop levishouse: %v\n ", stop_error)
 	}
-}
-
-// castToResponse casts any interface to
-// type Response, the format used for valid
-// levihouse's responses.
-func castToResponse(anyInterface interface{}) (cast_response Response) {
-	cast_response, _ = anyInterface.(Response)
-	return cast_response
 }
 
 // E2E integration test
@@ -232,23 +232,27 @@ func TestLevishouseMakesEmailConnections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\nFailed to initiate connection %v\n%v\n", err, connection, resp)
 	}
-	// // Get the current list of connections
-	// resp, err = house_under_test.Call("INBOX", nil)
-	// var connections xip.Connections
-	// json.NewDecoder(castToResponse(resp).Data).Decode(&connections)
-	// t.Log(connections)
-	// if err != nil {
-	// 	t.Fatalf("Failed to get list of connections: %v\n", err)
-	// }
-	// // Verify test connection registered
-	// match := false
-	// for connected := range connections {
-	// 	if connected.EmailConnectId == connection.EmailConnectId && connected.EmailConnect == connection.EmailConnect {
-	// 		match = true
-	// 		break
-	// 	}
-	// }
-	// if !match {
-	// 	t.Fatalf("Test connection %v \n not present in list of connections %v ", connection, connections)
-	// }
+	// Get the current list of connections
+	tries := 10
+	var connections xip.Connections
+	for tries > 0 {
+		resp, err = house_under_test.Call("INBOX", nil)
+		err = json.Unmarshal([]byte(castToResponse(resp).Json), &connections)
+		if len(connections.EmailConnections) > 0 {
+			break
+		}
+		tries--
+		time.Sleep(100 * time.Millisecond)
+	}
+	// Verify test connection registered
+	match := false
+	for _, connected := range connections.EmailConnections {
+		if connected.EmailConnectId == connection.EmailConnectId && connected.EmailConnect == connection.EmailConnect {
+			match = true
+			break
+		}
+	}
+	if !match {
+		t.Fatalf("Test connection %v \n not present in list of connections %v ", connection, connections)
+	}
 }

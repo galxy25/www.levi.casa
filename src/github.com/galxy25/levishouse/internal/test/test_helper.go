@@ -18,7 +18,7 @@ type TestableProcess interface {
 	Start() (err error) // Constructor
 	Stop() (err error)  // De-constructor
 	HealthCheck() (healthy bool, err error)
-	Call(method string, body interface{}) (response interface{}, err error) // {f = method, x = body ; f(x)}
+	Call(method string, body interface{}) (response interface{}, err error) // {f = method, x = body, y = response + error; f(x) = y}
 }
 
 // ExecuteTestProcess executes a testable process

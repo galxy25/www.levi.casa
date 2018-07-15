@@ -4,6 +4,7 @@ package main
 
 // yada yada yada, #def you
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
@@ -11,7 +12,6 @@ import (
 	tell "github.com/galxy25/levishouse/tell"
 	xip "github.com/galxy25/levishouse/xip"
 	log "github.com/sirupsen/logrus"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -38,7 +38,7 @@ var ENDPOINTS = map[string]Endpoint{
 	"CONNECT": Endpoint{
 		Path: "/connect",
 		Verb: "POST"},
-	"INBOX  ": Endpoint{
+	"INBOX": Endpoint{
 		Path: "/inbox",
 		Verb: "GET"},
 }
@@ -53,6 +53,8 @@ func IsEmpty(s *string) (empty bool) {
 // --- BEGIN INIT ---
 // Initialize environment dependent variables
 var toker = os.Getenv("TOKER")
+
+var home_port, _ = strconv.Atoi(os.Getenv("CASA_PORT"))
 
 // File path where desired connections data is stored
 var DESIRED_CONNECTIONS_FILEPATH = os.Getenv("DESIRED_CONNECTIONS_FILEPATH")
@@ -98,14 +100,13 @@ type Endpoint struct {
 // Response represents an HTTP response
 // returned by a call to a levishouse endpoint
 type Response struct {
-	Message    string        `json:"message"`
-	StatusCode int           `json:"status_code"`
-	Error      string        `json:"error"`
-	Data       io.ReadCloser `json:"data"`
+	Message    string `json:"message"`
+	StatusCode int    `json:"status_code"`
+	Error      string `json:"error"`
+	Json       string `json:"json"`
 }
 
 // --- END Data ---
-// --- BEGIN Library ---
 // ping returns pong
 // HTTP health check handler
 func ping(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +114,12 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	// we're still
 	// alive and kicking...it
 	// TODO: Implement a real health check
-	w.Write([]byte(HEALTH_CHECK_OK))
+	response := &Response{
+		Message:    HEALTH_CHECK_OK,
+		StatusCode: http.StatusOK}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusTeapot)
+	json.NewEncoder(w).Encode(response)
 }
 
 // connect processes a clients
@@ -164,12 +170,46 @@ func connect(w http.ResponseWriter, r *http.Request) {
 	// Return to the user success in
 	// persisting the desired connection
 	response := &Response{
-		Message: "Connection initiated"}
-	data_bytes := new(bytes.Buffer)
-	json.NewEncoder(data_bytes).Encode(email_connection)
-	response.Data = ioutil.NopCloser(data_bytes)
+		Message:    "Connection initiated",
+		StatusCode: http.StatusAccepted}
+	response_bytes, _ := json.Marshal(email_connection)
+	response.Json = string(response_bytes)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(response)
+}
+
+// inbox returns an inbox of current connections
+func inbox(w http.ResponseWriter, r *http.Request) {
+	var connections xip.Connections
+	// Open current connections list
+	connection_file, err := os.OpenFile(CURRENT_CONNECTIONS_FILEPATH, os.O_CREATE|os.O_RDONLY, 0644)
+	defer connection_file.Close()
+	if err != nil {
+		package_logger.WithFields(log.Fields{
+			"resource": "io/file",
+			"executor": "#inbox",
+		}).Fatal(fmt.Sprintf("Failed to open %v", CURRENT_CONNECTIONS_FILEPATH))
+		panic(err)
+	}
+	// Iterate over each connection and add to response
+	connection_scanner := bufio.NewScanner(connection_file)
+	connection_scanner.Split(bufio.ScanLines)
+	for connection_scanner.Scan() {
+		connection, err := xip.EmailConnectFromString(connection_scanner.Text())
+		if err != nil {
+			continue
+		}
+		connections.EmailConnections = append(connections.EmailConnections, *connection)
+	}
+	// Return to the user all current connections
+	response := &Response{
+		Message:    "Current connections",
+		StatusCode: http.StatusOK}
+	w.Header().Set("Content-Type", "application/json")
+	response_bytes, err := json.Marshal(connections)
+	response.Json = string(response_bytes)
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -208,6 +248,8 @@ func main() {
 	httpd.HandleFunc(ENDPOINTS["HEALTH"].Path, ping)
 	// Expose an endpoint for connect requests
 	httpd.HandleFunc(ENDPOINTS["CONNECT"].Path, connect)
+	// Expose an endpoint for inbox requests
+	httpd.HandleFunc(ENDPOINTS["INBOX"].Path, inbox)
 	// Start the connection reconciliation service
 	// for ensuring
 	// with the monotonic progression of time and loop iterations
@@ -264,12 +306,13 @@ func main() {
 	//      }
 	// }()
 	// Run the web service for interested clients of levi.casa
-	err := http.ListenAndServe(":8081", loggingHandler(httpd))
+	err := http.ListenAndServe(fmt.Sprintf(":%v", home_port), loggingHandler(httpd))
 	if err != nil {
 		package_logger.WithFields(log.Fields{
 			"resource": "io/port",
 			"executor": "#main",
-		}).Fatal("Failed to run HTTP server on 8081")
+			"port":     home_port,
+		}).Fatal("Failed to run HTTP server")
 		panic(err)
 	}
 }

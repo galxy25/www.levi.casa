@@ -1,11 +1,10 @@
 # Use minimal base golang/linux image
 From golang:alpine
-
 # Install curl so we can use it for health checking
 # containers of this image
 RUN apk add --no-cache curl
 # Install make for running build commands
-# Probably a bit of an overkill versus sh'ing tings
+# Probably a bit of an overkill versus sh'ing things
 RUN apk add --update make
 # Copy the server src files to the containers go directory
 ADD ./src /go/src/
@@ -13,6 +12,8 @@ ADD ./src /go/src/
 ADD ./static /go/static
 # Copy the services build file to the containers working directory
 ADD ./Makefile ./
+# Copy app environment file
+ADD ./Envfile ./
 # Build the levishouse command inside the container.
 RUN make build
 # Run the levishouse command by default

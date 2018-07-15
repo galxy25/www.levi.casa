@@ -1,0 +1,5 @@
+CASA_PORT=8081
+TOKER=sky
+AWS_SDK_LOAD_CONFIG=1
+DESIRED_CONNECTIONS_FILEPATH=data/desired_connections.txt
+CURRENT_CONNECTIONS_FILEPATH=data/current_connections.txt
