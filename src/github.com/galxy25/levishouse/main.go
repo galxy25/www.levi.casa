@@ -242,6 +242,10 @@ func main() {
 	// TODO extract into separate cmd,binary, and docker image
 	go func() {
 		for {
+			done := make(chan struct{})
+			connected := make(chan string)
+			defer close(done)
+			defer close(connected)
 			// Sweep!
 			//  for each desired connection in the input file
 			//    verify it is not in the output file
@@ -253,7 +257,7 @@ func main() {
 			//              write it to the output file
 			//        else
 			//           leave it in the input file
-			tell.SweepConnections(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH)
+			tell.SweepConnections(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, done, connected)
 			// Connect!
 			// for each desired connection in the input file
 			//  attempt to make the connection

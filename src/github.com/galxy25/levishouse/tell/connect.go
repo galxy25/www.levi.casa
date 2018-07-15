@@ -37,21 +37,14 @@ const (
 //          verify it is not in the output file
 //      if it is
 //          remove it from the input file
-//      else
-//          query the output event log for desired connection
-//          if attempted and successful
-//              write it to the output file
-//          else
-//              leave it in the input file
-
-// func SweepConnections(){
-// 	// Get iterator of desired_connections
-// 	// Determine if current iteration is in current_connections
-// 	// Sweep it
-// 	// Wait for more work!
-// }
-func SweepConnections(desired_connections string, current_connections string) {
-	// Read persisted connection state
+// When SweepConnections returns
+// all past connections are swept
+// and future connections can be swept
+// by pushing them to the connected channel
+// sweeping will stop when a message is sent on
+// the done channel
+func SweepConnections(desired_connections string, current_connections string, done <-chan struct{}, connected <-chan string) {
+	// Get iterator on desired_connections
 	input_file, err := os.OpenFile(desired_connections, os.O_RDONLY|os.O_CREATE, 0644)
 	defer input_file.Close()
 	if err != nil {
@@ -62,134 +55,93 @@ func SweepConnections(desired_connections string, current_connections string) {
 		}).Fatal(fmt.Sprintf("Failed to open %v", desired_connections))
 		panic(err)
 	}
+	// Iterate over desired_connections
 	input_scanner := bufio.NewScanner(input_file)
 	input_scanner.Split(bufio.ScanLines)
-	// Check to see if each desired connection is
-	// in the list of current connections
 	for input_scanner.Scan() {
-		// 🙏🏾🙏🏾🙏🏾
-		// https://nathanleclaire.com/blog/2014/12/29/shelled-out-commands-in-golang/
-		// search current connections for matching desired connection
-		cmdName := "grep"
-		cmdArgs := []string{"-iw", input_scanner.Text(), current_connections}
-		// i.e. grep -iw "here@go.com:sky SGVyZQ== false 1529615331" current_connections.txt
-		// -w https://unix.stackexchange.com/questions/206903/match-exact-string-using-grep
-		cmd := exec.Command(cmdName, cmdArgs...)
-		cmdReader, err := cmd.StdoutPipe()
+		// Check to see if iterated desired connection
+		// is in the list of current connections
+		desired_connection := input_scanner.Text()
+		connection_desired, err := xip.EmailConnectFromString(desired_connection)
 		if err != nil {
 			package_logger.WithFields(log.Fields{
-				"resource": "grep",
-				"executor": "#SweepConnections",
-				"error":    err,
-			}).Fatal(fmt.Sprintf("Error creating StdoutPipe for Cmd: %v\n", err))
-			panic(err)
+				"connection": desired_connection,
+				"executor":   "#SweepConnections",
+				"err":        err,
+			}).Info("Skipping invalid desired connection")
+			continue
 		}
-
-		err = cmd.Start()
-		if err != nil {
+		connected := connection_desired.ExistsInFile(current_connections)
+		if !connected {
+			continue
+		}
+		// Sweep the made connection
+		sweep_err := sweepConnection(desired_connection, desired_connections)
+		if sweep_err == nil {
 			package_logger.WithFields(log.Fields{
-				"resource": "grep",
-				"executor": "#SweepConnections",
-				"error":    err,
-			}).Fatal(fmt.Sprintf("Error starting Cmd: %v\n", err))
-			panic(err)
-		}
-
-		cmd_scanner := bufio.NewScanner(cmdReader)
-		cmd_scanner.Split(bufio.ScanLines)
-		// If a non-nil match was found for a desired and current connection
-		// e.g. we successfully made the connection!
-		if cmd_scanner.Scan() && input_scanner.Text() != "" {
-			fmt.Printf("Matched: %v | %v \n", input_scanner.Text(), cmd_scanner.Text())
-			// XXXX: Brutal hack for greedy matching
-			// TODO: Refactor, compose and move guard higher
-			// (like into an interface perhaps that can guard against garbage input 🤷🏾‍♂️)
-			if input_scanner.Text() != cmd_scanner.Text() {
-				greedy_match := true
-				// Loosest of validation that
-				// connections to compare are functional for comparing
-				desired_connection_parts := strings.Split(input_scanner.Text(), " ")
-				// 4 because we expect connections to be serialized
-				// according to the xip.EmailConnect struct field order.
-				if len(desired_connection_parts) < 4 {
-					fmt.Println("Skipping desired connection with less than three tokens")
-					greedy_match = false
-					continue
-				}
-				current_connection_parts := strings.Split(cmd_scanner.Text(), " ")
-				if len(current_connection_parts) < 4 {
-					fmt.Println("Skipping current connection with less than three tokens")
-					greedy_match = false
-					continue
-				}
-				match_criteria := make(map[int]string)
-				// Match on message content, message sender,
-				match_criteria[0] = desired_connection_parts[0]
-				// message sender,
-				match_criteria[1] = desired_connection_parts[1]
-				// and message ReceiveEpoch
-				match_criteria[3] = desired_connection_parts[3]
-				for key, value := range match_criteria {
-					if current_connection_parts[key] != value {
-						fmt.Println("Skipping current connection for non-greedy matching with desired_connection")
-						fmt.Printf("Desired: %v | Current: %v\n", value, current_connections[key])
-						greedy_match = false
-						break
-					}
-				}
-				if !greedy_match {
-					fmt.Println("Skipping incomplete match")
-					continue
-				}
-			}
-			sed_command := "sed"
-			current_connection := input_scanner.Text()
-			// Escape sed regex characters
-			// lazily:
-			// Put a backslash before $.*/[\]^
-			// and only those characters
-			// https://unix.stackexchange.com/questions/32907/what-characters-do-i-need-to-escape-when-using-sed-in-a-sh-script
-			// because I'm "encoding" messages
-			// into base64
-			// https://en.wikipedia.org/wiki/Base64
-			// HACK:
-			// only doing '/' for now
-			sed_safe_connection := strings.
-				Replace(current_connection, "/", "\\/", -1)
-			sed_sweep_args := []string{"-i", fmt.Sprintf("s/%v//g", sed_safe_connection), desired_connections}
-			if runtime.GOOS == "darwin" {
-				sed_sweep_args = []string{"-i", "", fmt.Sprintf("s/%v//g", sed_safe_connection), desired_connections}
-			}
-			//  Remove the realized from the desired
-			_, sweep_err := exec.Command(sed_command, sed_sweep_args...).Output()
-			if sweep_err != nil {
-				package_logger.WithFields(log.Fields{
-					"resource":           "io/file",
-					"io":                 desired_connections,
-					"executor":           "#SweepConnections.sed",
-					"error":              sweep_err,
-					"command_parameters": sed_sweep_args,
-				}).Fatal(fmt.Sprintf("Failed to sed | %v", desired_connections))
-				panic(sweep_err)
-			} else {
-				package_logger.WithFields(log.Fields{
-					"resource":           "io/file",
-					"io":                 desired_connections,
-					"executor":           "#SweepConnections.sed",
-					"command_parameters": sed_sweep_args,
-				}).Info(fmt.Sprintf("Sweeped! connection | %v", input_scanner.Text()))
-			}
-		}
-		// Wait waits until the grep command
-		// for a matching desired and current connection
-		// finishes cleanly and ensures
-		// closure of any pipes siphoning from it's output.
-		err = cmd.Wait()
-		if err != nil {
-			// Ignoring as grep returns non-zero if no match found
-			fmt.Printf("No match for %v | in: %v \n", input_scanner.Text(), current_connections)
+				"swept":      desired_connection,
+				"swept_from": desired_connections,
+				"executor":   "#SweepConnections",
+			}).Info("Sweeped!")
 		}
 	}
+	// Kick off a go-routine
+	// to sweep new connections as they occur
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case made_connection, more := <-connected:
+				if more {
+					// Sweep the made connection
+					sweep_err := sweepConnection(made_connection, desired_connections)
+					if sweep_err == nil {
+						package_logger.WithFields(log.Fields{
+							"swept":      made_connection,
+							"swept_from": desired_connections,
+							"executor":   "#SweepConnections",
+						}).Info("Sweeped!")
+					}
+				}
+			}
+		}
+	}()
+}
+
+// sweepConnection sweeps a connection from a file
+// returning error if any
+func sweepConnection(connection string, sweep_file string) (err error) {
+	sed_command := "sed"
+	// Sanitize input for sed by
+	// removing whitespace and lazily
+	// escaping sed regex characters
+	// Put a backslash before $.*/[\]^
+	// and only those characters
+	// https://unix.stackexchange.com/questions/32907/what-characters-do-i-need-to-escape-when-using-sed-in-a-sh-script
+	// because I'm "encoding" messages
+	// into base64
+	// https://en.wikipedia.org/wiki/Base64
+	// HACK: Only doing '/' for now
+	// TODO: Escape all of $.*/[\]^
+	sed_safe_connection := strings.TrimSpace(strings.
+		Replace(connection, "/", "\\/", -1))
+	sed_sweep_args := []string{"-i", fmt.Sprintf("s/%v//g", sed_safe_connection), sweep_file}
+	if runtime.GOOS == "darwin" {
+		sed_sweep_args = []string{"-i", "", fmt.Sprintf("s/%v//g", sed_safe_connection), sweep_file}
+	}
+	//  Remove the realized from the desired
+	_, err = exec.Command(sed_command, sed_sweep_args...).Output()
+	if err != nil {
+		package_logger.WithFields(log.Fields{
+			"resource":           "io/file",
+			"io":                 sweep_file,
+			"executor":           "#sweepConnection.sed",
+			"error":              err,
+			"command_parameters": sed_sweep_args,
+		}).Error("Failed to sweep connection")
+	}
+	return err
 }
 
 // Connect sends messages from one person to another
