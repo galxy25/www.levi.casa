@@ -43,6 +43,13 @@ const (
 //              write it to the output file
 //          else
 //              leave it in the input file
+
+// func SweepConnections(){
+// 	// Get iterator of desired_connections
+// 	// Determine if current iteration is in current_connections
+// 	// Sweep it
+// 	// Wait for more work!
+// }
 func SweepConnections(desired_connections string, current_connections string) {
 	// Read persisted connection state
 	input_file, err := os.OpenFile(desired_connections, os.O_RDONLY|os.O_CREATE, 0644)
@@ -58,7 +65,7 @@ func SweepConnections(desired_connections string, current_connections string) {
 	input_scanner := bufio.NewScanner(input_file)
 	input_scanner.Split(bufio.ScanLines)
 	// Check to see if each desired connection is
-	// in the list of persisted or logged connections
+	// in the list of current connections
 	for input_scanner.Scan() {
 		// 🙏🏾🙏🏾🙏🏾
 		// https://nathanleclaire.com/blog/2014/12/29/shelled-out-commands-in-golang/
@@ -70,15 +77,22 @@ func SweepConnections(desired_connections string, current_connections string) {
 		cmd := exec.Command(cmdName, cmdArgs...)
 		cmdReader, err := cmd.StdoutPipe()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error creating StdoutPipe for Cmd", err)
-			os.Exit(1)
+			package_logger.WithFields(log.Fields{
+				"resource": "grep",
+				"executor": "#SweepConnections",
+				"error":    err,
+			}).Fatal(fmt.Sprintf("Error creating StdoutPipe for Cmd: %v\n", err))
+			panic(err)
 		}
 
 		err = cmd.Start()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error starting Cmd", err)
-			// continue
-			os.Exit(1)
+			package_logger.WithFields(log.Fields{
+				"resource": "grep",
+				"executor": "#SweepConnections",
+				"error":    err,
+			}).Fatal(fmt.Sprintf("Error starting Cmd: %v\n", err))
+			panic(err)
 		}
 
 		cmd_scanner := bufio.NewScanner(cmdReader)
@@ -173,7 +187,7 @@ func SweepConnections(desired_connections string, current_connections string) {
 		err = cmd.Wait()
 		if err != nil {
 			// Ignoring as grep returns non-zero if no match found
-			fmt.Sprintf("No match for %v | in: %v", input_scanner.Text(), desired_connections)
+			fmt.Printf("No match for %v | in: %v \n", input_scanner.Text(), current_connections)
 		}
 	}
 }

@@ -20,7 +20,7 @@ import (
 )
 
 // Path to test executables dir for use by the test run
-var test_bin_dir = flag.String("test_bin_dir", "", "Dir of executables for use by the test run")
+var project_root = flag.String("project_root", "", "App root directory for the package under test")
 
 // An instance of the levishouse process
 // executed as part of integration testing
@@ -39,7 +39,7 @@ func (l *LevishouseTestProcess) Start() (err error) {
 	// we could fail to start our test server
 	// yet still get a healthy response from
 	// a previous instance
-	run_cmd := exec.Command("sh", "-c", fmt.Sprintf("make restart -f %v/Makefile -C %v", *test_bin_dir, *test_bin_dir))
+	run_cmd := exec.Command("sh", "-c", fmt.Sprintf("make restart -f %v/Makefile -C %v", *project_root, *project_root))
 	out, err := run_cmd.CombinedOutput()
 	if err != nil {
 		l.test_context.Logf("Failed to run levishouse: %v, %v", string(out), err)
@@ -83,7 +83,7 @@ func (l *LevishouseTestProcess) Stop() (err error) {
 		return errors.New("kill -s 0 on levishouse returned non nil, unable to stop non-running server.")
 	}
 	// Stop the process
-	stop_cmd := exec.Command("sh", "-c", fmt.Sprintf("make stop -f %v/Makefile -C %v", *test_bin_dir, *test_bin_dir))
+	stop_cmd := exec.Command("sh", "-c", fmt.Sprintf("make stop -f %v/Makefile -C %v", *project_root, *project_root))
 	out, err := stop_cmd.CombinedOutput()
 	if err != nil {
 		l.test_context.Logf("Failed to stop levishouse: %v, %v", string(out), err)

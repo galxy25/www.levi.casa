@@ -6,7 +6,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	tell "github.com/galxy25/levishouse/tell"
@@ -20,8 +19,6 @@ import (
 )
 
 // --- BEGIN Globals ---
-// Default anonymous user token, e.g a token's antonym
-const ANON_TOKER = "antonym"
 
 // Affirmative response to a health check
 const HEALTH_CHECK_OK = "pong"
@@ -41,12 +38,6 @@ var ENDPOINTS = map[string]Endpoint{
 	"INBOX": Endpoint{
 		Path: "/inbox",
 		Verb: "GET"},
-}
-
-// IsEmpty returns bool as to whether string s is empty.
-// TODO: extract => levisutils
-func IsEmpty(s *string) (empty bool) {
-	return *s == ""
 }
 
 // --- END Globals ---
@@ -144,18 +135,9 @@ func connect(w http.ResponseWriter, r *http.Request) {
 		}).Fatal(fmt.Sprintf("Failed to open %v", DESIRED_CONNECTIONS_FILEPATH))
 		panic(err)
 	}
-	// extract to xip.EmailConnect interface
-	// along with inline/ugly toStringing() below
-	if IsEmpty(&email_connection.EmailConnectId) {
-		email_connection.EmailConnectId = ANON_TOKER
-	}
 	email_connection.ReceiveEpoch = strconv.Itoa(int(do_connect_epoch))
-	encoded_message := base64.StdEncoding.EncodeToString([]byte(email_connection.EmailConnect))
-	email_connection_xip := fmt.Sprintf("%v:%v %v %t %v\n", email_connection.EmailConnectId,
-		toker,
-		encoded_message,
-		email_connection.SubscribeToMailingList,
-		email_connection.ReceiveEpoch)
+
+	email_connection_xip := email_connection.ToString()
 	// Persist desired connection
 	_, err = in_file.WriteString(email_connection_xip)
 	if err != nil {

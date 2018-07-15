@@ -10,8 +10,8 @@ export GOPATH=$(PWD)
 lint :
 	echo "Linting"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go fmt; \
-		go vet *.go
+		go fmt ../...; \
+		go vet ../...
 
 install :
 	echo "Installing"
@@ -27,8 +27,9 @@ build : lint
 test : lint build
 	echo "Testing"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go test -v -cover --race -args -test_bin_dir=$(PWD)
-
+		go test -v -cover --race -args -project_root=$(PWD); \
+		cd tell; \
+		go test -v -cover --race
 doc :
 	echo "Backgrounding godoc server at http://localhost:2022"
 	nohup godoc -http=:2022 >> godoc.out 2>&1 &
