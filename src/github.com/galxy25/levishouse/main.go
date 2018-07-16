@@ -2,7 +2,6 @@
 // for Levi Schoen's digital home: https://www.levi.casa
 package main
 
-// yada yada yada, #def you
 import (
 	"bufio"
 	"bytes"
@@ -20,28 +19,6 @@ import (
 
 // --- BEGIN Globals ---
 
-// Affirmative response to a health check
-const HEALTH_CHECK_OK = "pong"
-
-// List of HTTP endpoints exposed
-// via levishouse
-var ENDPOINTS = map[string]Endpoint{
-	"BASE": Endpoint{
-		Path: "/",
-		Verb: "GET"},
-	"HEALTH": Endpoint{
-		Path: "/ping",
-		Verb: "GET"},
-	"CONNECT": Endpoint{
-		Path: "/connect",
-		Verb: "POST"},
-	"INBOX": Endpoint{
-		Path: "/inbox",
-		Verb: "GET"},
-}
-
-// --- END Globals ---
-// --- BEGIN INIT ---
 // Initialize environment dependent variables
 var toker = os.Getenv("TOKER")
 
@@ -52,35 +29,6 @@ var DESIRED_CONNECTIONS_FILEPATH = os.Getenv("DESIRED_CONNECTIONS_FILEPATH")
 
 // File path where current connection data is stored
 var CURRENT_CONNECTIONS_FILEPATH = os.Getenv("CURRENT_CONNECTIONS_FILEPATH")
-
-// Purposes and paths of exposed endpoints
-
-// Configure package logging context
-var package_logger = log.WithFields(log.Fields{
-	"package": "levishouse",
-	"file":    "main.go",
-})
-
-// init configures:
-//   Project level logging
-//     Format: JSON
-//     Output: os.Stdout
-//     Level:  INFO
-func init() {
-	// Log as JSON instead of the default ASCII formatter.
-	log.SetFormatter(&log.JSONFormatter{})
-	// Output to stdout instead of the default stderr
-	// N.B.: Could be any io.Writer
-	log.SetOutput(os.Stdout)
-	// Only log the info severity or above.
-	log.SetLevel(log.InfoLevel)
-}
-
-// --- END INIT ---
-// --- BEGIN Data ---
-// TODO: Investigate if there is a way
-// to codegen this client/server boilerplate
-// swagger mayhaps?
 
 // Endpoint represents an HTTP endpoint
 // exposed and serviced by levishouse
@@ -97,7 +45,53 @@ type Response struct {
 	Json       string `json:"json"`
 }
 
-// --- END Data ---
+// Affirmative response to a health check
+const HEALTH_CHECK_OK = "pong"
+
+// Purposes and paths of
+// http endpoints
+var ENDPOINTS = map[string]Endpoint{
+	"BASE": Endpoint{
+		Path: "/",
+		Verb: "GET"},
+	"HEALTH": Endpoint{
+		Path: "/ping",
+		Verb: "GET"},
+	"CONNECT": Endpoint{
+		Path: "/connect",
+		Verb: "POST"},
+	"INBOX": Endpoint{
+		Path: "/inbox",
+		Verb: "GET"},
+}
+
+// Package logging context
+var package_logger = log.WithFields(log.Fields{
+	"package": "levishouse",
+	"file":    "main.go",
+})
+
+// --- END Globals ---
+
+// --- BEGIN INIT ---
+// init configures:
+//   Project level logging
+//     Format: JSON
+//     Output: os.Stdout
+//     Level:  INFO
+func init() {
+	// Log as JSON instead of the default ASCII formatter.
+	log.SetFormatter(&log.JSONFormatter{})
+	// Output to stdout instead of the default stderr
+	// N.B.: Could be any io.Writer
+	log.SetOutput(os.Stdout)
+	// Only log the info severity or above.
+	log.SetLevel(log.InfoLevel)
+}
+
+// --- END INIT ---
+
+// --- BEGIN Library ---
 // ping returns pong
 // HTTP health check handler
 func ping(w http.ResponseWriter, r *http.Request) {
@@ -113,9 +107,8 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// connect processes a clients
-// http request to connect
-// over email, SMS, chat
+// connect handles a clients
+// request to connect
 func connect(w http.ResponseWriter, r *http.Request) {
 	// Record the time this connection was initiated
 	// 🤔 hmmm maybe the client should set and send this?
@@ -161,7 +154,7 @@ func connect(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// inbox returns an inbox of current connections
+// inbox returns the list of current connections
 func inbox(w http.ResponseWriter, r *http.Request) {
 	var connections xip.Connections
 	// Open current connections list
@@ -195,9 +188,9 @@ func inbox(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// loggingHandler wraps an HTTP handler and logs
-// the request, blindly de-serializing the body as JSON
-func loggingHandler(h http.Handler) http.Handler {
+// jsonLoggingHandler wraps an HTTP handler and logs
+// the request, de-serializing the body as JSON
+func jsonLoggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request_body interface{}
 		json.NewDecoder(r.Body).Decode(&request_body)
@@ -216,6 +209,8 @@ func loggingHandler(h http.Handler) http.Handler {
 		h.ServeHTTP(w, r)
 	})
 }
+
+// --- END Library ---
 
 // main
 //  runs the web service
@@ -252,11 +247,7 @@ func main() {
 			//    if it is
 			//      remove it from the input file
 			//    else
-			//      query the output event log for desired connection
-			//        if attempted and successful
-			//              write it to the output file
-			//        else
-			//           leave it in the input file
+			//      leave it in the input file
 			tell.SweepConnections(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, done, connected)
 			// Connect!
 			// for each desired connection in the input file
@@ -280,8 +271,6 @@ func main() {
 			// cheap local storage
 			// over
 			// metered requests and bandwidth
-			// TODO: Add a bounded
-			// 60s back off sleep here
 		}
 	}()
 	// Engage and Segment audience
@@ -292,7 +281,7 @@ func main() {
 	//      }
 	// }()
 	// Run the web service for interested clients of levi.casa
-	err := http.ListenAndServe(fmt.Sprintf(":%v", home_port), loggingHandler(httpd))
+	err := http.ListenAndServe(fmt.Sprintf(":%v", home_port), jsonLoggingHandler(httpd))
 	if err != nil {
 		package_logger.WithFields(log.Fields{
 			"resource": "io/port",

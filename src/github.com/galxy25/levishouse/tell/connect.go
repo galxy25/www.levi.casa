@@ -4,7 +4,6 @@
 //      AWS Simple Notification Service
 package tell
 
-// yada yada yada, #def you
 import (
 	"bufio"
 	"encoding/base64"
@@ -23,13 +22,29 @@ import (
 	"time"
 )
 
+// --- BEGIN INIT ---
+// Configure package logging context
+var package_logger = log.WithFields(log.Fields{
+	"package": "levishouse/tell",
+	"file":    "connect.go",
+})
+
+// Initialize environment dependent variables
+var toker = os.Getenv("TOKER")
+
+// Sigh, only a "variable" so we can stub it in tests
+var sns_publisher = func(message string) (resp interface{}, err error) {
+	sess := session.Must(session.NewSession())
+	svc := sns.New(sess)
+	params := &sns.PublishInput{
+		Message:  aws.String(message),
+		TopicArn: aws.String("arn:aws:sns:us-west-2:540120437916:www_levi_casa"),
+	}
+	resp, err = svc.Publish(params)
+	return resp, err
+}
+
 // --- BEGIN Globals ---
-const (
-	// Number of desired connections to buffer for connecting
-	CONNECTION_BUFFER_SIZE = 64
-	// Number of go-routines to run for handling connections
-	CONNECTION_SOCKET_POOL_SIZE = 4
-)
 
 // SweepConnections lists, verifies, and sets
 // the current status of any desired connections via algorithm:
@@ -109,6 +124,57 @@ func SweepConnections(desired_connections string, current_connections string, do
 	}()
 }
 
+// Connect sends messages from one person to another
+// for each desired connection in the input file
+//      attempt to make the connection
+//      if connection successful
+//          write it to the output file
+//      else
+//          no-op
+//          (☝🏾 will get reconciled on the next loop)
+func Connect(desired_connections string, current_connections string) {
+	var wait_group sync.WaitGroup
+	// Create reader for persisted connection state
+	input_file, err := os.Open(desired_connections)
+	defer input_file.Close()
+	if err != nil {
+		package_logger.WithFields(log.Fields{
+			"resource": "io/file",
+			"executor": "#Connect",
+		}).Fatal(fmt.Sprintf("Failed to open %v", desired_connections))
+		panic(err)
+	}
+	input_scanner := bufio.NewScanner(input_file)
+	input_scanner.Split(bufio.ScanLines)
+	// Iterate over each desired connection
+	// and attempt to make the connection
+	for input_scanner.Scan() {
+		current_line := input_scanner.Text()
+		if current_line == "" {
+			continue
+		} else {
+			connection, err := xip.EmailConnectFromString(current_line)
+			if err != nil {
+				continue
+			}
+			package_logger.WithFields(log.Fields{
+				"executor": "#Connect",
+				"resource": "io/channel",
+				// "io":       fmt.Sprintf("%v", socket_drain),
+				"io_value": connection,
+			}).Info("Sending email connection to channel for processing")
+			// Pass this connection to the
+			// buffered connection handler
+			go doEmailConnect(connection, current_connections, &wait_group)
+			wait_group.Add(1)
+		}
+	}
+	wait_group.Wait()
+}
+
+// --- END Globals ---
+
+// --- BEGIN Library ---
 // sweepConnection sweeps a connection from a file
 // returning error if any
 func sweepConnection(connection string, sweep_file string) (err error) {
@@ -144,91 +210,6 @@ func sweepConnection(connection string, sweep_file string) (err error) {
 	return err
 }
 
-// Connect sends messages from one person to another
-// for each desired connection in the input file
-//      attempt to make the connection
-//      if connection successful
-//          write it to the output file
-//      else
-//          no-op
-//          (☝🏾 will get reconciled on the next loop)
-func Connect(desired_connections string, current_connections string) {
-	var wait_group sync.WaitGroup
-	// Set up a done channel that's shared by the whole pipeline,
-	// and close that channel when this pipeline exits, as a signal
-	// for all the drain goroutines we start to exit.
-	flush := make(chan struct{})
-	defer close(flush)
-	// Buffered channel which all persisted connections
-	// flow through for
-	//     persisting the current state of the socket
-	socket_sink := make(chan *xip.EmailConnect, CONNECTION_SOCKET_POOL_SIZE)
-	defer close(socket_sink)
-	// Buffered channel which all desired connections
-	// flow through for
-	//     making the connection
-	socket_drain := make(chan *xip.EmailConnect, CONNECTION_SOCKET_POOL_SIZE)
-	defer close(socket_drain)
-	// pipeline, sync, wait, close, defer all the channels
-	// Create reader for persisted connection state
-	input_file, err := os.Open(desired_connections)
-	defer input_file.Close()
-	if err != nil {
-		package_logger.WithFields(log.Fields{
-			"resource": "io/file",
-			"executor": "#Connect",
-		}).Fatal(fmt.Sprintf("Failed to open %v", desired_connections))
-		panic(err)
-	}
-	input_scanner := bufio.NewScanner(input_file)
-	input_scanner.Split(bufio.ScanLines)
-	// Iterate over each desired connection
-	// and attempt to make the connection
-	for input_scanner.Scan() {
-		current_line := input_scanner.Text()
-		if current_line == "" {
-			continue
-		} else {
-			connection, err := xip.EmailConnectFromString(current_line)
-			if err != nil {
-				continue
-			}
-			package_logger.WithFields(log.Fields{
-				"executor": "#Connect",
-				"resource": "io/channel",
-				"io":       fmt.Sprintf("%v", socket_drain),
-				"io_value": connection,
-			}).Info("Sending email connection to channel for processing")
-			// Pass this connection to the
-			// buffered connection handler
-			go doEmailConnect(connection, current_connections, &wait_group)
-			wait_group.Add(1)
-		}
-	}
-	// chronically cellularize TPS
-	// HACK: Sleep 1-5 minutes
-	// n number stream consumers
-	// TODO: batch and rate limited connection endpoint
-	// (cron + uniq + |)
-	// or
-	// (cloudwatchevents + lambda + dynamo)
-	// versus naive clock limited TPS impl
-	wait_group.Wait()
-}
-
-// --- END Globals ---
-
-// --- BEGIN INIT ---
-// Configure package logging context
-var package_logger = log.WithFields(log.Fields{
-	"package": "levishouse/tell",
-	"file":    "connect.go",
-})
-
-// Initialize environment dependent variables
-var toker = os.Getenv("TOKER")
-
-// --- BEGIN Library ---
 // doEmailConnect makes email connections by sending me an email via AWS SNS
 func doEmailConnect(email_connection *xip.EmailConnect, current_connections string, wait_group *sync.WaitGroup) {
 	defer wait_group.Done()
@@ -237,19 +218,13 @@ func doEmailConnect(email_connection *xip.EmailConnect, current_connections stri
 		"command_parameters": email_connection,
 	}).Info("Processing email connection to initiate")
 	message := email_connection.EmailConnect
-	sess := session.Must(session.NewSession())
-	svc := sns.New(sess)
-	params := &sns.PublishInput{
-		Message:  aws.String(message),
-		TopicArn: aws.String("arn:aws:sns:us-west-2:540120437916:www_levi_casa"),
-	}
-	resp, err := svc.Publish(params)
+	resp, err := sns_publisher(message)
 	if err != nil {
 		// Cast err to awserr.Error
 		// to get the Code and Message from an error.
 		package_logger.WithFields(log.Fields{
-			"executor":           "#doEmailConnect.sns.#Publish",
-			"command_parameters": params,
+			"executor":           "#sns_publisher",
+			"command_parameters": message,
 			"error":              err.Error(),
 		}).Error("Error making email connection")
 		return

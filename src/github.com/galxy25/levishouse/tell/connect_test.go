@@ -148,3 +148,70 @@ func TestSweepConnectionsSweepsNewConnections(t *testing.T) {
 		}
 	}
 }
+
+func TestConnectMakesConnections(t *testing.T) {
+	desired, current := "TestConnectMakesConnections.desired", "TestConnectMakesConnections.current"
+	defer os.Remove(desired)
+	defer os.Remove(current)
+	desired_file, err := os.OpenFile(desired, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Errorf("Unable to open file: %v\n", desired_file)
+	}
+	defer desired_file.Close()
+	// Construct desired connections
+	desired_connections := []xip.EmailConnect{
+		xip.EmailConnect{
+			EmailConnect:           "Salutations,Body,Farewell",
+			EmailConnectId:         "tester@test.com",
+			SubscribeToMailingList: false,
+			ReceiveEpoch:           "1531622217",
+		},
+		xip.EmailConnect{
+			EmailConnect:           "Farewell, Salutations,Body",
+			EmailConnectId:         "tester@test.com",
+			SubscribeToMailingList: false,
+			ReceiveEpoch:           "1531622299",
+		},
+		xip.EmailConnect{
+			EmailConnect:           "Body, Salutations,Farewell",
+			EmailConnectId:         "tester@test.com",
+			SubscribeToMailingList: false,
+			ReceiveEpoch:           "1531622200",
+		},
+	}
+	for _, desired_connection := range desired_connections {
+		desired_file.WriteString(desired_connection.ToString())
+	}
+	saved := sns_publisher
+	defer func() { sns_publisher = saved }()
+	sns_publisher = func(message string) (resp interface{}, err error) {
+		t.Log("You've been stubbed!")
+		return resp, err
+	}
+	Connect(desired, current)
+	current_file, err := os.OpenFile(current, os.O_RDONLY, 0644)
+	if err != nil {
+		t.Errorf("Unable to open file: %v\n", current_file)
+	}
+	defer current_file.Close()
+	current_scanner := bufio.NewScanner(current_file)
+	current_scanner.Split(bufio.ScanLines)
+	for current_scanner.Scan() {
+		current_connection, err := xip.EmailConnectFromString(current_scanner.Text())
+		if err != nil {
+			t.Errorf("Invalid current connection: %v\n", current_connection)
+			continue
+		}
+		for index, desired_connection := range desired_connections {
+			if desired_connection.Matches(current_connection) {
+				desired_connections = append(desired_connections[:index], desired_connections[index+1:]...)
+				break
+			}
+		}
+	}
+	if len(desired_connections) > 0 {
+		t.Errorf("Failed to make connections: %v\n", desired_connections)
+	}
+}
+
+func TestConnectReportsMadeConnections(t *testing.T) {}
