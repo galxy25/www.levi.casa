@@ -11,7 +11,7 @@ lint :
 	echo "Linting"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
 		go fmt ../...; \
-		go vet ../...
+		go vet ../...;
 
 install :
 	echo "Installing"
@@ -25,9 +25,9 @@ build : lint
 		go install
 
 test : lint build
-		# go test -v -cover --race -args -project_root=$(PWD); \
 	echo "Testing"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
+		go test -v -cover --race -args -project_root=$(PWD); \
 		cd communicator; \
 		go test -v -timeout 3s -cover --race
 doc :

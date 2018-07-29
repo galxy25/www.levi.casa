@@ -230,7 +230,8 @@ func SerializeConnection(deserialized interface{}) (serialized []byte, err error
 }
 
 func DeserializeConnection(serialized []byte) (deserialized interface{}, err error) {
-	deserialized, err = data.EmailConnectFromString(string(serialized))
+	connection, err := data.EmailConnectFromString(string(serialized))
+	deserialized = *connection
 	return deserialized, err
 }
 
@@ -247,9 +248,9 @@ func NewConnectionFile(filePath string) (file ConnectionFile) {
 	return ConnectionFile{sf}
 }
 
-func (c *ConnectionFile) WriteConnections(connections []interface{}) (err error) {
-	for connection := range connections {
-		_, err := c.Store(connection)
+func (c *ConnectionFile) WriteConnections(connections []data.EmailConnect) (err error) {
+	for _, connection := range connections {
+		_, err = c.Store(connection)
 		if err != nil {
 			break
 		}
@@ -257,30 +258,42 @@ func (c *ConnectionFile) WriteConnections(connections []interface{}) (err error)
 	return err
 }
 
-func (c *ConnectionFile) FindConnections(connections []interface{}) (found []interface{}, err error) {
-	// selected, selectErr := forEach.Select(c.All, func(item interface{}) (predicate bool, err error) {
-	// 	connection, ok := (item).(*data.EmailConnect)
-	// 	if !ok {
-	// 		predicate = false
-	// 		return predicate, errors.New(fmt.Sprintf("Unable to cast %v\n to data.EmailConnect", item))
-	// 	}
-	// 	if connection.Matches(&seedData[0]) {
-	// 		predicate = true
-	// 	}
-	// 	return predicate, err
-	// })
-	// for selected := range selected
-	return
+func (c *ConnectionFile) FindConnections(connections []data.EmailConnect) (found []data.EmailConnect, errs []error) {
+	finder, findErr := forEach.Select(c.All, func(item interface{}) (predicate bool, err error) {
+		connectionItem, ok := item.(data.EmailConnect)
+		if !ok {
+			return predicate, errors.New(fmt.Sprintf("Unable to cast %v\n to data.EmailConnect", item))
+		}
+		for _, connection := range connections {
+			if connectionItem.Matches(&connection) {
+				predicate = true
+				break
+			}
+		}
+		return predicate, err
+	})
+	for find := range finder {
+		connectionItem, ok := find.(data.EmailConnect)
+		if !ok {
+			continue
+		}
+		found = append(found, connectionItem)
+	}
+	for err := range findErr {
+		if err == nil {
+			continue
+		}
+		errs = append(errs, err)
+	}
+	return found, errs
 }
 
-func TestConnectReportsSweepableConnections(t *testing.T) {
-	filePath := "fun.functions"
-	defer os.Remove(filePath)
-	a := io.SerializableLFile{
-		FilePath:    filePath,
-		Serialize:   SerializeConnection,
-		Deserialize: DeserializeConnection,
-	}
+func TestConnectReportsSweptConnections(t *testing.T) {
+	desired, current := "TestConnectReportsSweepableConnections.desired", "TestConnectReportsSweepableConnections.current"
+	defer os.Remove(desired)
+	defer os.Remove(current)
+	desiredConnections := NewConnectionFile(desired)
+	currentConnections := NewConnectionFile(current)
 	seedData := []data.EmailConnect{
 		data.EmailConnect{
 			EmailConnect:           "Salutations, Body, Farewell",
@@ -307,39 +320,33 @@ func TestConnectReportsSweepableConnections(t *testing.T) {
 			ReceiveEpoch:           "1531622369",
 		},
 	}
-	for _, seed := range seedData {
-		_, err := a.Store(seed)
-		if err != nil {
-			t.Error(err)
-		}
-	}
-	all, _, exit := a.All()
-	for stuff := range all {
-		t.Log(stuff)
-	}
-	err := <-exit
+	err := desiredConnections.WriteConnections(seedData)
 	if err != nil {
 		t.Error(err)
 	}
-	extracted, exit := forEach.Detect(a.All, func(item interface{}) (predicate bool, err error) {
-		connection, ok := (item).(*data.EmailConnect)
-		if !ok {
-			predicate = false
-			return predicate, errors.New(fmt.Sprintf("Unable to cast %v\n to data.EmailConnect", item))
-		}
-		if connection.Matches(&seedData[1]) {
-			predicate = true
-		}
-		return predicate, err
-	})
-	t.Log(extracted)
-	if extracted == nil {
-		t.Error("Failed to detect seeded connection")
+	connected := make(chan *data.EmailConnect, len(seedData))
+	saved := sns_publisher
+	defer func() { sns_publisher = saved }()
+	sns_publisher = func(message string) (resp interface{}, err error) {
+		return resp, err
 	}
-	for err := range exit {
-		if err != nil {
-			t.Error(err)
+	Connect(desired, current, connected)
+	for _, seed := range seedData {
+		exists := seed.ExistsInFile(current)
+		if !exists {
+			t.Errorf("failed to find %v in %v\n", seed, current)
 		}
+	}
+	var connectionAlerts []data.EmailConnect
+	for i := 0; i < len(seedData); i++ {
+		connectionAlerts = append(connectionAlerts, *(<-connected))
+	}
+	found, errs := currentConnections.FindConnections(connectionAlerts)
+	if len(found) != len(connectionAlerts) {
+		t.Error("def something wrong")
+	}
+	if len(errs) > 0 {
+		t.Error(errs)
 	}
 }
 

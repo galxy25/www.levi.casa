@@ -25,11 +25,12 @@ type Predicate func(subject interface{}) (applies bool, err error)
 
 // Select selects a new collection of items
 // that satisfy the selector by applying
-// the selector for each item in a collection
-// stopping at and returning the first iteration error(if any)
+// the selector for each iterated item in a collection
+// stopping and returning iteration and select error(if any of either)
 func Select(forEach ForEach, selector Predicate) (selected chan interface{}, errs chan error) {
 	selected = make(chan interface{})
 	errs = make(chan error, 2)
+	done := make(chan struct{}, 2)
 	go func() {
 		defer close(selected)
 		defer close(errs)
@@ -37,20 +38,21 @@ func Select(forEach ForEach, selector Predicate) (selected chan interface{}, err
 		defer close(cancel)
 		for {
 			select {
-			case item, more := <-each:
+			case <-done:
+				return
+			case err := <-eachErr:
+				errs <- err
+				done <- struct{}{}
+			default:
+				item, more := <-each
 				if !more {
 					continue
 				}
-				doSelect(item, selector, selected, errs)
-			case forEachErr := <-eachErr:
-				errs <- forEachErr
-				// golang's select is non-deterministic
-				for item := range each {
-					// Ultimately the heart of select is
-					// a for loop inside another for loop. 🤔
-					doSelect(item, selector, selected, errs)
+				err := doSelect(item, selector, selected)
+				if err != nil {
+					errs <- err
+					done <- struct{}{}
 				}
-				return
 			}
 		}
 	}()
@@ -63,6 +65,7 @@ func Select(forEach ForEach, selector Predicate) (selected chan interface{}, err
 func Detect(forEach ForEach, detector Predicate) (detected interface{}, errs chan error) {
 	errs = make(chan error, 1)
 	each, cancel, eachErr := forEach()
+	defer close(cancel)
 	for item := range each {
 		predicate, predicateErr := detector(item)
 		if predicateErr != nil {
@@ -75,7 +78,7 @@ func Detect(forEach ForEach, detector Predicate) (detected interface{}, errs cha
 		detected = item
 		break
 	}
-	close(cancel)
+	cancel <- struct{}{}
 	go func() {
 		defer close(errs)
 		for err := range eachErr {
@@ -86,16 +89,17 @@ func Detect(forEach ForEach, detector Predicate) (detected interface{}, errs cha
 }
 
 // doSelect applies selector to given item
-// adding item to selected if result true
+// adding item to selected if predicate true
 // and error(if any) to errs
-func doSelect(item interface{}, selector Predicate, selected chan interface{}, errs chan error) {
+// returning error(if any)
+func doSelect(item interface{}, selector Predicate, selected chan interface{}) (err error) {
 	predicate, predicateErr := selector(item)
 	if predicateErr != nil {
-		errs <- predicateErr
-		return
+		return predicateErr
 	}
 	if !predicate {
-		return
+		return predicateErr
 	}
 	selected <- item
+	return predicateErr
 }
