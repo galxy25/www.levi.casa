@@ -1,7 +1,7 @@
-// Package xip contains common interfaces
+// Package data contains common elements
 // and eXecute In Place data structures
 // for www.levi.casa servers
-package xip
+package data
 
 import (
 	"bufio"
@@ -26,7 +26,7 @@ func isEmpty(s *string) (empty bool) {
 	return *s == ""
 }
 
-// EmailConnect is the XIP for a
+// EmailConnect is the data for a
 // single email connection
 type EmailConnect struct {
 	// Contents of the email message
@@ -42,26 +42,32 @@ type EmailConnect struct {
 	ConnectEpoch string `json:"connect_epoch"`
 }
 
-func (e *EmailConnect) ToString() (stringy string) {
-	if isEmpty(&e.EmailConnectId) {
-		e.EmailConnectId = ANON_TOKER
-	}
+func (e *EmailConnect) BaseString() (stringy string) {
 	encoded_message := base64.StdEncoding.EncodeToString([]byte(e.EmailConnect))
-	// We really care about whitespace because
-	// we're matching off of the string via grep
-	if isEmpty(&e.ConnectEpoch) {
-		stringy = fmt.Sprintf("%v:%v %v %t %v\n", e.EmailConnectId,
+	if isEmpty(&e.EmailConnectId) {
+		stringy = fmt.Sprintf("%v:%v %v %t %v", ANON_TOKER,
 			toker,
 			encoded_message,
 			e.SubscribeToMailingList,
 			e.ReceiveEpoch)
 	} else {
-		stringy = fmt.Sprintf("%v:%v %v %t %v %v\n", e.EmailConnectId,
+		stringy = fmt.Sprintf("%v:%v %v %t %v", e.EmailConnectId,
 			toker,
 			encoded_message,
 			e.SubscribeToMailingList,
-			e.ReceiveEpoch,
-			e.ConnectEpoch)
+			e.ReceiveEpoch)
+	}
+	return stringy
+}
+
+func (e *EmailConnect) ToString() (stringy string) {
+	base := e.BaseString()
+	// We really care about whitespace because
+	// we're matching off of the string via grep
+	if isEmpty(&e.ConnectEpoch) {
+		stringy = fmt.Sprintf("%v\n", base)
+	} else {
+		stringy = fmt.Sprintf("%v %v\n", base, e.ConnectEpoch)
 	}
 	return stringy
 }
@@ -125,7 +131,7 @@ func EmailConnectFromString(raw string) (email_connection *EmailConnect, err err
 	// due to blindly reading any garbage line in desired
 	// as a valid connection
 	// 4 because we expect connections to be serialized
-	// according to the xip.EmailConnect struct field order.
+	// according to the data.EmailConnect struct field order.
 	if len(persisted_connection) < 4 {
 		return email_connection, errors.New(fmt.Sprintf("Invalid persisted connection: %v", persisted_connection))
 	}
@@ -142,7 +148,7 @@ func EmailConnectFromString(raw string) (email_connection *EmailConnect, err err
 	return email_connection, err
 }
 
-// Connections is the XIP for
+// Connections is the data for
 // collections of EmailConnect's
 type Connections struct {
 	EmailConnections []EmailConnect `json:"email_connections"`

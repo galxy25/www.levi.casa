@@ -6,8 +6,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	helper "github.com/galxy25/levishouse/internal/test"
-	xip "github.com/galxy25/levishouse/xip"
+	data "github.com/galxy25/home/data"
+	helper "github.com/galxy25/home/internal/test"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -22,18 +22,18 @@ import (
 // Path to test executables dir for use by the test run
 var project_root = flag.String("project_root", "", "App root directory for the package under test")
 
-// An instance of the levishouse process
+// An instance of the home process
 // executed as part of integration testing
-type LevishouseTestProcess struct {
+type HomeTestProcess struct {
 	test_context *testing.T // Interface to a `go test` invocation
 	pid          int        // Unique runtime identifier for this process
 	host_name    string     // Name of the host for this process
 	host_port    int        // Host port used by this process
 }
 
-// Start starts a test instance of levishouse
+// Start starts a test instance of home
 // returning any error associated with the start
-func (l *LevishouseTestProcess) Start() (err error) {
+func (l *HomeTestProcess) Start() (err error) {
 	// Ensure other levihouse processes are stopped
 	// running before testing a new one as otherwise
 	// we could fail to start our test server
@@ -42,16 +42,16 @@ func (l *LevishouseTestProcess) Start() (err error) {
 	run_cmd := exec.Command("sh", "-c", fmt.Sprintf("make restart -f %v/Makefile -C %v", *project_root, *project_root))
 	out, err := run_cmd.CombinedOutput()
 	if err != nil {
-		l.test_context.Logf("Failed to run levishouse: %v, %v", string(out), err)
+		l.test_context.Logf("Failed to run home: %v, %v", string(out), err)
 		return err
 	}
 	// HACK: `make restart` returns
-	// echo "LEVISHOUSE_PID: $$!"
+	// echo "home_PID: $$!"
 	// as it's last line of output
 	// TODO: use losf -i :`l.host_port` to get
 	// the pid of `l` we launched to listen on `l.host_port`
 	l.test_context.Logf("Run output: %v", string(out))
-	sliced_output := strings.Split(string(out), "LEVISHOUSE_PID:")
+	sliced_output := strings.Split(string(out), "HOME_PID:")
 	string_pid := strings.TrimSpace(strings.Split(sliced_output[len(sliced_output)-1], " ")[1])
 	// Set runtime values
 	l.pid, err = strconv.Atoi(string_pid)
@@ -61,37 +61,37 @@ func (l *LevishouseTestProcess) Start() (err error) {
 		l.test_context.Logf("Failed to convert %v to int", string_pid)
 		return err
 	}
-	l.test_context.Logf("levishouse pid: %v", l.pid)
+	l.test_context.Logf("home pid: %v", l.pid)
 	return err
 }
 
-// Stop stops a test instance of levishouse
+// Stop stops a test instance of home
 // returning any error associated with the stop
-func (l *LevishouseTestProcess) Stop() (err error) {
+func (l *HomeTestProcess) Stop() (err error) {
 	// Check the process is still running
 	// On *nix systems, always succeeds
 	// so discard error
-	levishouse, _ := os.FindProcess(l.pid)
+	home, _ := os.FindProcess(l.pid)
 	// https://stackoverflow.com/questions/15204162/check-if-a-process-exists-in-go-way
-	tap_response := levishouse.Signal(syscall.Signal(0))
+	tap_response := home.Signal(syscall.Signal(0))
 	l.test_context.Logf("process.Signal on pid %d returned: %v\n", l.pid, tap_response)
 	// http://man7.org/linux/man-pages/man2/kill.2.html#RETURN_VALUE
 	// No news is good news
 	// (which for the initiated is not news)
 	if tap_response != nil {
-		l.test_context.Log("kill -s 0 on levishouse returned non nil, unable to stop non-running server.")
-		return errors.New("kill -s 0 on levishouse returned non nil, unable to stop non-running server.")
+		l.test_context.Log("kill -s 0 on home returned non nil, unable to stop non-running server.")
+		return errors.New("kill -s 0 on home returned non nil, unable to stop non-running server.")
 	}
 	// Stop the process
 	stop_cmd := exec.Command("sh", "-c", fmt.Sprintf("make stop -f %v/Makefile -C %v", *project_root, *project_root))
 	out, err := stop_cmd.CombinedOutput()
 	if err != nil {
-		l.test_context.Logf("Failed to stop levishouse: %v, %v", string(out), err)
+		l.test_context.Logf("Failed to stop home: %v, %v", string(out), err)
 		return err
 	}
 	l.test_context.Logf("Stop output: %v", string(out))
 	// Verify the process is stopped
-	stop_response := levishouse.Signal(syscall.Signal(0))
+	stop_response := home.Signal(syscall.Signal(0))
 	// TODO: Extract retry logic to TestableProcess
 	for stop_response == nil {
 		time.Sleep(1 * time.Millisecond)
@@ -99,21 +99,21 @@ func (l *LevishouseTestProcess) Stop() (err error) {
 		// 1 seconds
 		// waiting for the server to heed stop command
 		l.test_context.Logf("process.Signal on pid %d returned: %v\n", l.pid, stop_response)
-		stop_response = levishouse.Signal(syscall.Signal(0))
+		stop_response = home.Signal(syscall.Signal(0))
 	}
 	// XXX: RUNTIME dependent
 	// macOS
 	// linux (ubuntu)
 	if !strings.Contains(stop_response.Error(), "process already finished") && !strings.Contains(stop_response.Error(), "No such process") {
-		err = errors.New(fmt.Sprintf("kill -s 0 on levishouse %v returned %v", levishouse, stop_response))
+		err = errors.New(fmt.Sprintf("kill -s 0 on home %v returned %v", home, stop_response))
 	}
 	return err
 }
 
-// HealthCheck performs a health check on a levishouse test instance
+// HealthCheck performs a health check on a home test instance
 // returning bool to indicate process health
 // and any associated error encountered during the health check
-func (l *LevishouseTestProcess) HealthCheck() (healthy bool, err error) {
+func (l *HomeTestProcess) HealthCheck() (healthy bool, err error) {
 	// Pessimistic assumption of
 	// sick until proven healthy!
 	healthy = false
@@ -129,12 +129,11 @@ func (l *LevishouseTestProcess) HealthCheck() (healthy bool, err error) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if err != nil {
-		l.test_context.Logf("Unable to ping levishouse: %v \n", err)
+		l.test_context.Logf("Unable to ping home: %v \n", err)
 		return healthy, err
 	}
 	// Parse health check response
 	ping_resp := castToResponse(resp)
-	l.test_context.Logf("Ping response from levishouse: %v \n", ping_resp)
 	// Check health check response
 	if ping_resp.Message == HEALTH_CHECK_OK && ping_resp.StatusCode == http.StatusOK {
 		healthy = true
@@ -142,9 +141,9 @@ func (l *LevishouseTestProcess) HealthCheck() (healthy bool, err error) {
 	return healthy, err
 }
 
-// Call calls a levishouse process
+// Call calls a home process
 // returning the call response and error
-func (l *LevishouseTestProcess) Call(method string, body interface{}) (response interface{}, err error) {
+func (l *HomeTestProcess) Call(method string, body interface{}) (response interface{}, err error) {
 	endpoint, exists := ENDPOINTS[method]
 	if !exists {
 		return response, errors.New(fmt.Sprintf("No matching endpoint found for method: %v\n Valid endpoints are: %v\n", method, ENDPOINTS))
@@ -153,7 +152,7 @@ func (l *LevishouseTestProcess) Call(method string, body interface{}) (response 
 	return response, err
 }
 
-func (l *LevishouseTestProcess) client(endpoint Endpoint, body interface{}) (response Response, err error) {
+func (l *HomeTestProcess) client(endpoint Endpoint, body interface{}) (response Response, err error) {
 	call_path := l.endpoint_uri(endpoint)
 	switch endpoint.Verb {
 	case "GET":
@@ -179,15 +178,15 @@ func (l *LevishouseTestProcess) client(endpoint Endpoint, body interface{}) (res
 }
 
 // host_address returns the network address of the
-// host running the levishouse test process
-func (l *LevishouseTestProcess) host_address() (address string) {
+// host running the home test process
+func (l *HomeTestProcess) host_address() (address string) {
 	address = fmt.Sprintf("%v:%v", l.host_name, l.host_port)
 	return address
 }
 
 // endpoint_uri returns the network URI
-// exposed by the running levishouse for the provided endpoint
-func (l *LevishouseTestProcess) endpoint_uri(endpoint Endpoint) (endpoint_uri string) {
+// exposed by the running home for the provided endpoint
+func (l *HomeTestProcess) endpoint_uri(endpoint Endpoint) (endpoint_uri string) {
 	endpoint_uri = fmt.Sprintf("http://%v%v", l.host_address(), endpoint.Path)
 	return endpoint_uri
 }
@@ -204,55 +203,60 @@ func castToResponse(anyInterface interface{}) (cast_response Response) {
 // "Is the power light on?"
 // "Is the power light off?"
 func TestItRunsAndStops(t *testing.T) {
-	test_house := LevishouseTestProcess{test_context: t}
+	test_house := HomeTestProcess{test_context: t}
 	house_under_test, err := helper.ExecuteTestProcess(&test_house)
 	if err != nil {
-		t.Fatalf("Failed to run levishouse: %v\n", err)
+		t.Fatalf("Failed to run home: %v\n", err)
 	}
 	stop_error := house_under_test.Terminate()
 	if stop_error != nil {
-		t.Fatalf("Failed to stop levishouse: %v\n ", stop_error)
+		t.Fatalf("Failed to stop home: %v\n ", stop_error)
 	}
 }
 
 // E2E integration test
-// connection -> levishouse => connected
-func TestLevishouseMakesEmailConnections(t *testing.T) {
-	test_house := LevishouseTestProcess{test_context: t}
+// connection -> home => connected
+func TestHomeMakesEmailConnectionInUnderOneSecond(t *testing.T) {
+	test_house := HomeTestProcess{test_context: t}
 	house_under_test, _ := helper.ExecuteTestProcess(&test_house)
 	defer house_under_test.Terminate()
 	// Construct connection to make
-	connection := xip.EmailConnect{
+	connection := data.EmailConnect{
 		EmailConnect:           "Salutations,Body,Farewell",
 		EmailConnectId:         "tester@test.com",
 		SubscribeToMailingList: false,
 	}
-	// Send connection to levishouse
+	// Send connection to home
 	resp, err := house_under_test.Call("CONNECT", connection)
 	if err != nil {
 		t.Fatalf("%v\nFailed to initiate connection %v\n%v\n", err, connection, resp)
 	}
-	// Get the current list of connections
+	var persisted_connection data.EmailConnect
+	err = json.Unmarshal([]byte(castToResponse(resp).Json), &persisted_connection)
+	if err != nil {
+		t.Errorf("connect endpoint responded with invalid connection response: %v\n%v\n", resp, err)
+	}
+	// Verify test connection registered
+	match := false
 	tries := 10
-	var connections xip.Connections
-	for tries > 0 {
+	// Get the current list of connections
+	var connections data.Connections
+	for tries > 0 && !match {
 		resp, err = house_under_test.Call("INBOX", nil)
 		err = json.Unmarshal([]byte(castToResponse(resp).Json), &connections)
-		if len(connections.EmailConnections) > 0 {
+		for _, connected := range connections.EmailConnections {
+			if connected.Matches(&persisted_connection) {
+				match = true
+				break
+			}
+		}
+		if match {
 			break
 		}
 		tries--
 		time.Sleep(100 * time.Millisecond)
 	}
-	// Verify test connection registered
-	match := false
-	for _, connected := range connections.EmailConnections {
-		if connected.EmailConnectId == connection.EmailConnectId && connected.EmailConnect == connection.EmailConnect {
-			match = true
-			break
-		}
-	}
 	if !match {
-		t.Fatalf("Test connection %v \n not present in list of connections %v ", connection, connections)
+		t.Fatalf("Test connection %v \n not present in list of connections %v ", persisted_connection, connections)
 	}
 }

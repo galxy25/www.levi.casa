@@ -3,3 +3,4 @@ TOKER=sky
 AWS_SDK_LOAD_CONFIG=1
 DESIRED_CONNECTIONS_FILEPATH=data/desired_connections.txt
 CURRENT_CONNECTIONS_FILEPATH=data/current_connections.txt
+HOME_SNS_TOPIC=arn:aws:sns:us-west-2:540120437916:www_levi_casa

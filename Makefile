@@ -1,7 +1,7 @@
 include Envfile
 export $(shell sed 's/=.*//' Envfile)
 PACKAGE_DIR=src
-ROOT_PACKAGE=github.com/galxy25/levishouse
+ROOT_PACKAGE=github.com/galxy25/home
 GOPATH=$(PWD)
 export GOPATH=$(PWD)
 
@@ -25,30 +25,30 @@ build : lint
 		go install
 
 test : lint build
+		# go test -v -cover --race -args -project_root=$(PWD); \
 	echo "Testing"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go test -v -cover --race -args -project_root=$(PWD); \
-		cd tell; \
-		go test -v -cover --race
+		cd communicator; \
+		go test -v -timeout 3s -cover --race
 doc :
 	echo "Backgrounding godoc server at http://localhost:2022"
 	nohup godoc -http=:2022 >> godoc.out 2>&1 &
 	echo "Doc yourself, before you wreck yourself:"
-	echo "open http://127.0.0.1:2022/pkg/github.com/galxy25/levishouse/"
-	echo "open http://127.0.0.1:2022/pkg/github.com/galxy25/levishouse/internal/?m=all"
+	echo "open http://127.0.0.1:2022/pkg/github.com/galxy25/home/"
+	echo "open http://127.0.0.1:2022/pkg/github.com/galxy25/home/internal/?m=all"
 
 stop :
 	echo "Stopping web server"
 	# Need to double the $$ to get the right
 	# substitution value for awk in the below command
 	# https://stackoverflow.com/questions/30445218/why-does-awk-not-work-correctly-in-a-makefile
-	ps -eax | grep '[b]in/levishouse' | awk '{ print $$1 }' | xargs kill -9
+	ps -eax | grep '[b]in/home' | awk '{ print $$1 }' | xargs kill -9
 
 start :
-	echo "Running web server in background"
-	echo "Appending output to levis_house.out"
-	nohup ./bin/levishouse >> levis_house.out 2>&1 & \
-	echo "LEVISHOUSE_PID: $$!"
+	echo "Running home web server in background"
+	echo "Appending output to home.out"
+	nohup ./bin/home >> home.out 2>&1 & \
+	echo "HOME_PID: $$!"
 
 run : build start
 
@@ -94,10 +94,10 @@ docker_serve :
 clean :
 	echo "Cleaning"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go clean
+		go clean ../...
 	rm -rf bin/*
 	rm -rf pkg/*
-	rm -f levis_house.out
+	rm -f home.out
 	rm -f godoc.out
 	rm -f data/*
 

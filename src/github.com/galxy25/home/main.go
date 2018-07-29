@@ -7,8 +7,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	tell "github.com/galxy25/levishouse/tell"
-	xip "github.com/galxy25/levishouse/xip"
+	communicator "github.com/galxy25/home/communicator"
+	data "github.com/galxy25/home/data"
 	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
@@ -31,13 +31,13 @@ var DESIRED_CONNECTIONS_FILEPATH = os.Getenv("DESIRED_CONNECTIONS_FILEPATH")
 var CURRENT_CONNECTIONS_FILEPATH = os.Getenv("CURRENT_CONNECTIONS_FILEPATH")
 
 // Endpoint represents an HTTP endpoint
-// exposed and serviced by levishouse
+// exposed and serviced by home
 type Endpoint struct {
 	Path, Verb string
 }
 
 // Response represents an HTTP response
-// returned by a call to a levishouse endpoint
+// returned by a call to a home endpoint
 type Response struct {
 	Message    string `json:"message"`
 	StatusCode int    `json:"status_code"`
@@ -67,7 +67,7 @@ var ENDPOINTS = map[string]Endpoint{
 
 // Package logging context
 var package_logger = log.WithFields(log.Fields{
-	"package": "levishouse",
+	"package": "home",
 	"file":    "main.go",
 })
 
@@ -77,15 +77,16 @@ var package_logger = log.WithFields(log.Fields{
 // init configures:
 //   Project level logging
 //     Format: JSON
+// 	     Timestamp: RFC3339Nano
 //     Output: os.Stdout
 //     Level:  INFO
 func init() {
 	// Log as JSON instead of the default ASCII formatter.
-	log.SetFormatter(&log.JSONFormatter{})
+	log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.RFC3339Nano})
 	// Output to stdout instead of the default stderr
 	// N.B.: Could be any io.Writer
 	log.SetOutput(os.Stdout)
-	// Only log the info severity or above.
+	// Only log at level INFO
 	log.SetLevel(log.InfoLevel)
 }
 
@@ -116,7 +117,7 @@ func connect(w http.ResponseWriter, r *http.Request) {
 	do_connect_epoch := do_connect_timestamp.Unix()
 	// Blindly decode the request
 	// as an email connection
-	var email_connection xip.EmailConnect
+	var email_connection data.EmailConnect
 	json.NewDecoder(r.Body).Decode(&email_connection)
 	// Acquire connection publishing appendix
 	in_file, err := os.OpenFile(DESIRED_CONNECTIONS_FILEPATH, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -130,14 +131,14 @@ func connect(w http.ResponseWriter, r *http.Request) {
 	}
 	email_connection.ReceiveEpoch = strconv.Itoa(int(do_connect_epoch))
 
-	email_connection_xip := email_connection.ToString()
+	email_connection_data := email_connection.ToString()
 	// Persist desired connection
-	_, err = in_file.WriteString(email_connection_xip)
+	_, err = in_file.WriteString(email_connection_data)
 	if err != nil {
 		package_logger.WithFields(log.Fields{
 			"resource":           "io/file",
 			"executor":           "#connect",
-			"command_parameters": email_connection_xip,
+			"command_parameters": email_connection_data,
 			"io_name":            DESIRED_CONNECTIONS_FILEPATH,
 		}).Fatal("Failed to persist desired connection")
 		panic(err)
@@ -156,7 +157,7 @@ func connect(w http.ResponseWriter, r *http.Request) {
 
 // inbox returns the list of current connections
 func inbox(w http.ResponseWriter, r *http.Request) {
-	var connections xip.Connections
+	var connections data.Connections
 	// Open current connections list
 	connection_file, err := os.OpenFile(CURRENT_CONNECTIONS_FILEPATH, os.O_CREATE|os.O_RDONLY, 0644)
 	defer connection_file.Close()
@@ -171,7 +172,7 @@ func inbox(w http.ResponseWriter, r *http.Request) {
 	connection_scanner := bufio.NewScanner(connection_file)
 	connection_scanner.Split(bufio.ScanLines)
 	for connection_scanner.Scan() {
-		connection, err := xip.EmailConnectFromString(connection_scanner.Text())
+		connection, err := data.EmailConnectFromString(connection_scanner.Text())
 		if err != nil {
 			continue
 		}
@@ -236,11 +237,14 @@ func main() {
 	// realized connections
 	// TODO extract into separate cmd,binary, and docker image
 	go func() {
+		done := make(chan struct{})
+		// Where the buffer size is how far ahead
+		// we will allow the publishers to outrun
+		// the consumers of this channel
+		connected := make(chan *data.EmailConnect, 10)
+		defer close(done)
+		defer close(connected)
 		for {
-			done := make(chan struct{})
-			connected := make(chan string)
-			defer close(done)
-			defer close(connected)
 			// Sweep!
 			//  for each desired connection in the input file
 			//    verify it is not in the output file
@@ -248,7 +252,7 @@ func main() {
 			//      remove it from the input file
 			//    else
 			//      leave it in the input file
-			tell.SweepConnections(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, done, connected)
+			communicator.SweepConnections(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, done, connected)
 			// Connect!
 			// for each desired connection in the input file
 			//  attempt to make the connection
@@ -257,7 +261,7 @@ func main() {
 			//  else
 			//    no-op
 			//    (☝🏾 will get reconciled on the next loop)
-			tell.Connect(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH)
+			communicator.Connect(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, connected)
 			// N.B. could do both Sweep! and Connect! concurrently
 			// but for frugality and programming for the
 			// average case doing them sequentially is correct

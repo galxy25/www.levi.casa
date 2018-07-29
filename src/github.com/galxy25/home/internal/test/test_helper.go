@@ -1,12 +1,14 @@
 package internal
 
-import ( /*👏🏾🔙*/ )
+import ( /* 👏🏾🔙 */ )
 
 // A TestProcess is-a process
 // intended to be executed by some
 // `func TestFoo(t *testing.T) {...}
 // as part of a
 // `go test` invocation
+// A brute force approach: Raise interfaces!
+// a.k.a. 👶🏾's first golang interface
 type TestProcess struct {
 	TestableProcess // A test process has-a TestableProcess
 }
