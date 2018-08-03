@@ -1,7 +1,6 @@
 package communicator
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	data "github.com/galxy25/home/data"
@@ -9,292 +8,11 @@ import (
 	io "github.com/galxy25/home/internal/io"
 	"os"
 	"testing"
+	"time"
 )
 
-// Test that connections that are present
-// in done file are swept from todo file
-func TestSweepConnectionsSweepsActuatedConnections(t *testing.T) {
-	desired, current := "TestSweepConnectionsSweepsActuatedConnections.desired", "TestSweepConnectionsSweepsActuatedConnections.current"
-	defer os.Remove(desired)
-	defer os.Remove(current)
-	desired_file, err := os.OpenFile(desired, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Errorf("Unable to open file: %v\n", desired_file)
-	}
-	defer desired_file.Close()
-	current_file, err := os.OpenFile(current, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Errorf("Unable to open file: %v\n", current_file)
-	}
-	defer current_file.Close()
-	done := make(chan struct{})
-	connected := make(chan *data.EmailConnect)
-	defer close(done)
-	defer close(connected)
-	// Construct desired connections
-	desired_connections := []data.EmailConnect{
-		data.EmailConnect{
-			EmailConnect:           "Farewell, Salutations,Body",
-			EmailConnectId:         "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622299",
-		},
-		data.EmailConnect{
-			EmailConnect:           "Body, Salutations,Farewell",
-			EmailConnectId:         "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622200",
-		},
-		data.EmailConnect{
-			EmailConnect:           "Salutations,Body,Farewell",
-			EmailConnectId:         "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622217",
-		},
-	}
-	for _, desired_connection := range desired_connections {
-		desired_file.WriteString(desired_connection.ToString())
-		desired_connection.ConnectEpoch = "2531622299"
-		current_file.WriteString(desired_connection.ToString())
-	}
-	SweepConnections(desired, current, done, connected)
-	// Assert desired file is empty of
-	// connections that should've been swept
-	unswept := false
-	desired_file, _ = os.OpenFile(desired, os.O_RDONLY, 0644)
-	desired_scanner := bufio.NewScanner(desired_file)
-	desired_scanner.Split(bufio.ScanLines)
-	for desired_scanner.Scan() {
-		leftover_desired_connection, err := data.EmailConnectFromString(desired_scanner.Text())
-		if err != nil {
-			continue
-		}
-		for _, desired_connection := range desired_connections {
-			if leftover_desired_connection.Matches(&desired_connection) {
-				unswept = true
-				break
-			}
-		}
-		if unswept {
-			t.Errorf("Failed to sweep: %v\n", desired_scanner.Text())
-		}
-	}
-}
-
-// Test that new connections sent to
-// SweepConnections connected channel are swept
-func TestSweepConnectionsSweepsNewConnections(t *testing.T) {
-	desired, current := "TestSweepConnectionsSweepsNewConnections.desired", "TestSweepConnectionsSweepsNewConnections.current"
-	done := make(chan struct{})
-	connected := make(chan *data.EmailConnect)
-	defer close(done)
-	defer close(connected)
-	SweepConnections(desired, current, done, connected)
-	defer os.Remove(desired)
-	defer os.Remove(current)
-	desired_file, err := os.OpenFile(desired, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Errorf("Unable to open file: %v\n", desired_file)
-	}
-	defer desired_file.Close()
-	current_file, err := os.OpenFile(current, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Errorf("Unable to open file: %v\n", current_file)
-	}
-	defer current_file.Close()
-	// Construct desired connections
-	desired_connections := []*data.EmailConnect{
-		&data.EmailConnect{
-			EmailConnect:           "Salutations,Body,Farewell",
-			EmailConnectId:         "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622217",
-		},
-		&data.EmailConnect{
-			EmailConnect:           "Body, Salutations,Farewell",
-			EmailConnectId:         "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622200",
-		},
-		&data.EmailConnect{
-			EmailConnect:           "Farewell, Salutations,Body",
-			EmailConnectId:         "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622299",
-		},
-	}
-	for _, desired_connection := range desired_connections {
-		desired_file.WriteString(desired_connection.BaseString())
-		// Fake that we made the connection
-		test_connected_at := "2531622299"
-		current_file.WriteString(fmt.Sprintf("%v %v\n", desired_connection.BaseString(), test_connected_at))
-		// Send the faux made connection to the sweeper
-		connected <- desired_connection
-	}
-	// Assert desired file is empty of
-	// connections that should've been swept
-	unswept := false
-	desired_file, _ = os.OpenFile(desired, os.O_RDONLY, 0644)
-	desired_scanner := bufio.NewScanner(desired_file)
-	desired_scanner.Split(bufio.ScanLines)
-	for desired_scanner.Scan() {
-		leftover_desired_connection, err := data.EmailConnectFromString(desired_scanner.Text())
-		if err != nil {
-			continue
-		}
-		for _, desired_connection := range desired_connections {
-			if leftover_desired_connection.Matches(desired_connection) {
-				unswept = true
-				break
-			}
-		}
-		if unswept {
-			t.Errorf("Failed to sweep: %v\n", desired_scanner.Text())
-		}
-	}
-}
-
-func TestConnectMakesConnections(t *testing.T) {
-	desired, current := "TestConnectMakesConnections.desired", "TestConnectMakesConnections.current"
-	defer os.Remove(desired)
-	defer os.Remove(current)
-	desired_file, err := os.OpenFile(desired, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Errorf("Unable to open file: %v\n", desired_file)
-	}
-	defer desired_file.Close()
-	// Construct desired connections
-	desired_connections := []data.EmailConnect{
-		data.EmailConnect{
-			EmailConnect:           "Salutations,Body,Farewell",
-			EmailConnectId:         "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622217",
-		},
-		data.EmailConnect{
-			EmailConnect:           "Farewell, Salutations,Body",
-			EmailConnectId:         "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622299",
-		},
-		data.EmailConnect{
-			EmailConnect:           "Body, Salutations,Farewell",
-			EmailConnectId:         "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622200",
-		},
-	}
-	for _, desired_connection := range desired_connections {
-		desired_file.WriteString(desired_connection.ToString())
-	}
-	saved := sns_publisher
-	defer func() { sns_publisher = saved }()
-	sns_publisher = func(message string) (resp interface{}, err error) {
-		return resp, err
-	}
-	connected := make(chan *data.EmailConnect, 10)
-	defer close(connected)
-	Connect(desired, current, connected)
-	current_file, err := os.OpenFile(current, os.O_RDONLY, 0644)
-	if err != nil {
-		t.Errorf("Unable to open file: %v\n", current_file)
-	}
-	defer current_file.Close()
-	current_scanner := bufio.NewScanner(current_file)
-	current_scanner.Split(bufio.ScanLines)
-	for current_scanner.Scan() {
-		current_connection, err := data.EmailConnectFromString(current_scanner.Text())
-		if err != nil {
-			t.Errorf("Invalid current connection: %v\n", current_connection)
-			continue
-		}
-		for index, desired_connection := range desired_connections {
-			if desired_connection.Matches(current_connection) {
-				desired_connections = append(desired_connections[:index], desired_connections[index+1:]...)
-				break
-			}
-		}
-	}
-	if len(desired_connections) > 0 {
-		t.Errorf("Failed to make connections: %v\n", desired_connections)
-	}
-}
-
-func SerializeConnection(deserialized interface{}) (serialized []byte, err error) {
-	connection, ok := deserialized.(data.EmailConnect)
-	if !ok {
-		return serialized, errors.New(fmt.Sprintf("Unable to serialize %v\n to an  data.EmailConnect", deserialized))
-	}
-	serialized = []byte(connection.ToString())
-	return serialized, nil
-}
-
-func DeserializeConnection(serialized []byte) (deserialized interface{}, err error) {
-	connection, err := data.EmailConnectFromString(string(serialized))
-	deserialized = *connection
-	return deserialized, err
-}
-
-type ConnectionFile struct {
-	*io.SerializableLFile
-}
-
-func NewConnectionFile(filePath string) (file ConnectionFile) {
-	sf := &io.SerializableLFile{
-		FilePath:    filePath,
-		Serialize:   SerializeConnection,
-		Deserialize: DeserializeConnection,
-	}
-	return ConnectionFile{sf}
-}
-
-func (c *ConnectionFile) WriteConnections(connections []data.EmailConnect) (err error) {
-	for _, connection := range connections {
-		_, err = c.Store(connection)
-		if err != nil {
-			break
-		}
-	}
-	return err
-}
-
-func (c *ConnectionFile) FindConnections(connections []data.EmailConnect) (found []data.EmailConnect, errs []error) {
-	finder, findErr := forEach.Select(c.All, func(item interface{}) (predicate bool, err error) {
-		connectionItem, ok := item.(data.EmailConnect)
-		if !ok {
-			return predicate, errors.New(fmt.Sprintf("Unable to cast %v\n to data.EmailConnect", item))
-		}
-		for _, connection := range connections {
-			if connectionItem.Matches(&connection) {
-				predicate = true
-				break
-			}
-		}
-		return predicate, err
-	})
-	for find := range finder {
-		connectionItem, ok := find.(data.EmailConnect)
-		if !ok {
-			continue
-		}
-		found = append(found, connectionItem)
-	}
-	for err := range findErr {
-		if err == nil {
-			continue
-		}
-		errs = append(errs, err)
-	}
-	return found, errs
-}
-
-func TestConnectReportsSweptConnections(t *testing.T) {
-	desired, current := "TestConnectReportsSweepableConnections.desired", "TestConnectReportsSweepableConnections.current"
-	defer os.Remove(desired)
-	defer os.Remove(current)
-	desiredConnections := NewConnectionFile(desired)
-	currentConnections := NewConnectionFile(current)
-	seedData := []data.EmailConnect{
+func defaultEmailConnections() (emailConnections []data.EmailConnect) {
+	emailConnections = []data.EmailConnect{
 		data.EmailConnect{
 			EmailConnect:           "Salutations, Body, Farewell",
 			EmailConnectId:         "tester@test.com",
@@ -320,6 +38,212 @@ func TestConnectReportsSweptConnections(t *testing.T) {
 			ReceiveEpoch:           "1531622369",
 		},
 	}
+	return emailConnections
+}
+
+func castToConnection(a interface{}) (connection data.EmailConnect, err error) {
+	connection, ok := a.(data.EmailConnect)
+	if !ok {
+		return connection, errors.New(fmt.Sprintf("Unable to cast %v to a data.EmailConnect\n", a))
+	}
+	return connection, nil
+}
+
+func SerializeConnection(deserialized interface{}) (serialized []byte, err error) {
+	connection, err := castToConnection(deserialized)
+	if err != nil {
+		return serialized, err
+	}
+	serialized = []byte(connection.ToString())
+	return serialized, nil
+}
+
+func DeserializeConnection(serialized []byte) (deserialized interface{}, err error) {
+	connection, err := data.EmailConnectFromString(string(serialized))
+	if err != nil {
+		return deserialized, err
+	}
+	deserialized = *connection
+	return deserialized, err
+}
+
+type ConnectionFile struct {
+	*io.SerializedLFile
+}
+
+func NewConnectionFile(filePath string) (file ConnectionFile) {
+	sf := &io.SerializedLFile{
+		FilePath:    filePath,
+		Serialize:   SerializeConnection,
+		Deserialize: DeserializeConnection,
+	}
+	return ConnectionFile{sf}
+}
+
+func (c *ConnectionFile) WriteConnections(connections []data.EmailConnect) (err error) {
+	for _, connection := range connections {
+		_, err = c.Store(connection)
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+func (c *ConnectionFile) FindConnections(connections []data.EmailConnect) (found []data.EmailConnect, errs []error) {
+	finder, findErr := forEach.Select(c.All, func(item interface{}) (predicate bool, err error) {
+		connectionItem, err := castToConnection(item)
+		if err != nil {
+			return predicate, err
+		}
+		for _, connection := range connections {
+			if connectionItem.Matches(&connection) {
+				predicate = true
+				break
+			}
+		}
+		return predicate, err
+	})
+	if findErr != nil {
+		errs = append(errs, findErr)
+		return found, errs
+	}
+	for find := range finder {
+		if find.Err != nil {
+			errs = append(errs, find.Err)
+		}
+		connectionItem, err := castToConnection(find.Item)
+		if err != nil {
+			continue
+		}
+		found = append(found, connectionItem)
+
+	}
+	return found, errs
+}
+
+func (c *ConnectionFile) DetectConnection(connection data.EmailConnect) (detected bool, err error) {
+	found, err := forEach.Detect(c.All, func(item interface{}) (predicate bool, err error) {
+		connectionItem, err := castToConnection(item)
+		if err != nil {
+			return predicate, err
+		}
+		if connectionItem.Matches(&connection) {
+			predicate = true
+		}
+		return predicate, err
+	})
+	if found != nil {
+		detected = true
+	}
+	return detected, err
+}
+
+func TestSweepConnectionsSweepsMadeConnections(t *testing.T) {
+	desired, current := "TestSweepConnectionsSweepsMadeConnections.desired", "TestSweepConnectionsSweepsMadeConnections.current"
+	defer os.Remove(desired)
+	defer os.Remove(current)
+	desiredConnections := NewConnectionFile(desired)
+	currentConnections := NewConnectionFile(current)
+	seedData := defaultEmailConnections()
+	err := desiredConnections.WriteConnections(seedData)
+	if err != nil {
+		t.Error(err)
+	}
+	done := make(chan struct{})
+	connected := make(chan *data.EmailConnect)
+	defer close(done)
+	defer close(connected)
+	for _, desiredConnection := range seedData {
+		desiredConnections.Store(desiredConnection)
+		// fake a made connection
+		desiredConnection.ConnectEpoch = "2531622299"
+		currentConnections.Store(desiredConnection)
+	}
+	SweepConnections(desired, current, done, connected)
+	unConnected, errs := desiredConnections.FindConnections(seedData)
+	if len(unConnected) != 0 {
+		t.Errorf("failed to make these connections %v\n", unConnected)
+	}
+	for err := range errs {
+		t.Errorf("error %v while searching %v for %v", err, desired, seedData)
+	}
+}
+
+func TestSweepConnectionsSweepsNewlyMadeConnections(t *testing.T) {
+	desired, current := "TestSweepConnectionsSweepsNewlyMadeConnections.desired", "TestSweepConnectionsSweepsNewlyMadeConnections.current"
+	done := make(chan struct{})
+	connected := make(chan *data.EmailConnect)
+	defer close(done)
+	defer close(connected)
+	SweepConnections(desired, current, done, connected)
+	defer os.Remove(desired)
+	defer os.Remove(current)
+	desiredConnections := NewConnectionFile(desired)
+	currentConnections := NewConnectionFile(current)
+	seedData := defaultEmailConnections()
+	for _, desiredConnection := range seedData {
+		desiredConnections.Store(desiredConnection)
+		desiredConnection.ConnectEpoch = "2531622299"
+		currentConnections.Store(desiredConnection)
+		// Send the faux made connection to the sweeper
+		connected <- &data.EmailConnect{
+			EmailConnect:           desiredConnection.EmailConnect,
+			EmailConnectId:         desiredConnection.EmailConnectId,
+			SubscribeToMailingList: desiredConnection.SubscribeToMailingList,
+			ReceiveEpoch:           desiredConnection.ReceiveEpoch,
+		}
+	}
+	unConnected, errs := desiredConnections.FindConnections(seedData)
+	for tries := 10; tries > 0 && len(unConnected) != 0; tries-- {
+		time.Sleep(10 * time.Millisecond)
+		unConnected, errs = desiredConnections.FindConnections(seedData)
+	}
+	if len(unConnected) != 0 {
+		t.Errorf("failed to sweep these connections %v\n", unConnected)
+	}
+	for err := range errs {
+		t.Errorf("error %v while searching %v for %v", err, desired, seedData)
+	}
+}
+
+func TestConnectMakesConnections(t *testing.T) {
+	desired, current := "TestConnectMakesConnections.desired", "TestConnectMakesConnections.current"
+	defer os.Remove(desired)
+	defer os.Remove(current)
+	desiredConnections := NewConnectionFile(desired)
+	seedData := defaultEmailConnections()
+	err := desiredConnections.WriteConnections(seedData)
+	if err != nil {
+		t.Error(err)
+	}
+	saved := sns_publisher
+	defer func() { sns_publisher = saved }()
+	sns_publisher = func(message string) (resp interface{}, err error) {
+		return resp, err
+	}
+	connected := make(chan *data.EmailConnect, len(seedData))
+	defer close(connected)
+	Connect(desired, current, connected)
+	currentConnections := NewConnectionFile(current)
+	for _, seed := range seedData {
+		detected, err := currentConnections.DetectConnection(seed)
+		if !detected {
+			t.Errorf("failed to find %v in %v\n", seed, current)
+		}
+		if err != nil {
+			t.Errorf("error %v while trying to detect %v in %v\n ", err, seed, current)
+		}
+	}
+}
+
+func TestConnectReportsMadeConnections(t *testing.T) {
+	desired, current := "TestConnectReportsMadeConnections.desired", "TestConnectReportsMadeConnections.current"
+	defer os.Remove(desired)
+	defer os.Remove(current)
+	desiredConnections := NewConnectionFile(desired)
+	currentConnections := NewConnectionFile(current)
+	seedData := defaultEmailConnections()
 	err := desiredConnections.WriteConnections(seedData)
 	if err != nil {
 		t.Error(err)
@@ -343,7 +267,19 @@ func TestConnectReportsSweptConnections(t *testing.T) {
 	}
 	found, errs := currentConnections.FindConnections(connectionAlerts)
 	if len(found) != len(connectionAlerts) {
-		t.Error("def something wrong")
+		t.Errorf("failed to find all of %v\n in %v\n", connectionAlerts, found)
+	}
+	for _, find := range found {
+		alerted := false
+		for _, alert := range connectionAlerts {
+			if alert.Matches(&find) {
+				alerted = true
+				break
+			}
+		}
+		if !alerted {
+			t.Errorf("no alert sent for connection %v\n", find)
+		}
 	}
 	if len(errs) > 0 {
 		t.Error(errs)

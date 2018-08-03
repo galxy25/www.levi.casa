@@ -1,6 +1,12 @@
 package internal
 
-import ( /* 👏🏾🔙 */ )
+import ( /* 👏🏾🔙 */
+)
+
+type Each struct {
+	Item interface{}
+	Err  error
+}
 
 // ForEach functions
 // lazily return all values of a collection
@@ -15,7 +21,7 @@ import ( /* 👏🏾🔙 */ )
 // and my CPs
 // https://www.martinfowler.com/articles/collection-pipeline/
 // https://www.youtube.com/watch?v=i28UEoLXVFQ
-type ForEach func() (each chan interface{}, cancel chan struct{}, errs chan error)
+type ForEach func(cancel <-chan struct{}) (forEach chan Each, err error)
 
 // Predicate functions evaluate whether
 // predicate applies for current subject
@@ -25,81 +31,67 @@ type Predicate func(subject interface{}) (applies bool, err error)
 
 // Select selects a new collection of items
 // that satisfy the selector by applying
-// the selector for each iterated item in a collection
-// stopping and returning iteration and select error(if any of either)
-func Select(forEach ForEach, selector Predicate) (selected chan interface{}, errs chan error) {
-	selected = make(chan interface{})
-	errs = make(chan error, 2)
-	done := make(chan struct{}, 2)
+// selector for each iterated item in a collection
+// returning selected and iteration error(if any)
+// selection stops after the first selection error
+func Select(forEach ForEach, selector Predicate) (selected chan Each, err error) {
+	selected = make(chan Each)
+	cancel := make(chan struct{}, 1)
+	each, err := forEach(cancel)
+	if err != nil {
+		close(selected)
+		return selected, err
+	}
 	go func() {
 		defer close(selected)
-		defer close(errs)
-		each, cancel, eachErr := forEach()
-		defer close(cancel)
-		for {
-			select {
-			case <-done:
+		for item := range each {
+			if item.Err != nil {
+				continue
+			}
+			predicate, predicateErr := selector(item.Item)
+			if !predicate {
+				continue
+			}
+			selected <- Each{
+				Item: item.Item,
+				Err:  predicateErr}
+			if predicateErr != nil {
+				cancel <- struct{}{}
 				return
-			case err := <-eachErr:
-				errs <- err
-				done <- struct{}{}
-			default:
-				item, more := <-each
-				if !more {
-					continue
-				}
-				err := doSelect(item, selector, selected)
-				if err != nil {
-					errs <- err
-					done <- struct{}{}
-				}
 			}
 		}
 	}()
-	return selected, errs
+	return selected, err
 }
 
 // Detect detects the first item in the
 // collection given for which the predicate holds
-// returning that item(if any) and err(s)(if any)
-func Detect(forEach ForEach, detector Predicate) (detected interface{}, errs chan error) {
-	errs = make(chan error, 1)
-	each, cancel, eachErr := forEach()
+// returning detected item and error(if any)
+func Detect(forEach ForEach, detector Predicate) (detected interface{}, err error) {
+	cancel := make(chan struct{}, 1)
 	defer close(cancel)
+	each, err := forEach(cancel)
+	if err != nil {
+		return detected, err
+	}
 	for item := range each {
-		predicate, predicateErr := detector(item)
+		if item.Err != nil {
+			continue
+		}
+		predicate, predicateErr := detector(item.Item)
 		if predicateErr != nil {
-			errs <- predicateErr
-			break
+			cancel <- struct{}{}
+			if predicate {
+				detected = item.Item
+			}
+			return detected, predicateErr
 		}
 		if !predicate {
 			continue
 		}
-		detected = item
+		detected = item.Item
+		cancel <- struct{}{}
 		break
 	}
-	cancel <- struct{}{}
-	go func() {
-		defer close(errs)
-		for err := range eachErr {
-			errs <- err
-		}
-	}()
-	return detected, errs
-}
-
-// doSelect applies selector to given item
-// adding item to selected if predicate true
-// and error(if any) to errs
-// returning error(if any)
-func doSelect(item interface{}, selector Predicate, selected chan interface{}) (err error) {
-	predicate, predicateErr := selector(item)
-	if predicateErr != nil {
-		return predicateErr
-	}
-	if !predicate {
-		return predicateErr
-	}
-	selected <- item
-	return predicateErr
+	return detected, err
 }

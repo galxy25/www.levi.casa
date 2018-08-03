@@ -102,7 +102,7 @@ func SweepConnections(desired_connections string, current_connections string, do
 				"swept":      connection_desired,
 				"swept_from": desired_connections,
 				"executor":   "#SweepConnections",
-			}).Info("Sweeped!")
+			}).Info("Swept!")
 		}
 	}
 	// Sweep new connections as they occur
