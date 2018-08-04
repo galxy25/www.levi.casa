@@ -223,8 +223,10 @@ func TestConnectMakesConnections(t *testing.T) {
 		return resp, err
 	}
 	connected := make(chan *data.EmailConnect, len(seedData))
+	newConnectionsQueue := make(chan *data.EmailConnect)
+	defer close(newConnectionsQueue)
 	defer close(connected)
-	Connect(desired, current, connected)
+	Connect(desired, current, connected, newConnectionsQueue)
 	currentConnections := NewConnectionFile(current)
 	for _, seed := range seedData {
 		detected, err := currentConnections.DetectConnection(seed)
@@ -249,12 +251,14 @@ func TestConnectReportsMadeConnections(t *testing.T) {
 		t.Error(err)
 	}
 	connected := make(chan *data.EmailConnect, len(seedData))
+	newConnectionsQueue := make(chan *data.EmailConnect)
+	defer close(newConnectionsQueue)
 	saved := sns_publisher
 	defer func() { sns_publisher = saved }()
 	sns_publisher = func(message string) (resp interface{}, err error) {
 		return resp, err
 	}
-	Connect(desired, current, connected)
+	Connect(desired, current, connected, newConnectionsQueue)
 	for _, seed := range seedData {
 		exists := seed.ExistsInFile(current)
 		if !exists {
@@ -286,4 +290,45 @@ func TestConnectReportsMadeConnections(t *testing.T) {
 	}
 }
 
-func TestConnectConnectsNewConnections(t *testing.T) {}
+func TestConnectConnectsNewConnections(t *testing.T) {
+	desired, current := "TestConnectConnectsNewConnections.desired", "TestConnectConnectsNewConnections.current"
+	defer os.Remove(desired)
+	defer os.Remove(current)
+	saved := sns_publisher
+	defer func() { sns_publisher = saved }()
+	sns_publisher = func(message string) (resp interface{}, err error) {
+		return resp, err
+	}
+	seedData := defaultEmailConnections()
+	connected := make(chan *data.EmailConnect, len(seedData))
+	newConnectionsQueue := make(chan *data.EmailConnect)
+	defer close(newConnectionsQueue)
+	defer close(connected)
+	Connect(desired, current, connected, newConnectionsQueue)
+	desiredConnections := NewConnectionFile(desired)
+	err := desiredConnections.WriteConnections(seedData)
+	if err != nil {
+		t.Error(err)
+	}
+	for _, seed := range seedData {
+		newConnectionsQueue <- &data.EmailConnect{
+			EmailConnect:           seed.EmailConnect,
+			EmailConnectId:         seed.EmailConnectId,
+			SubscribeToMailingList: seed.SubscribeToMailingList,
+			ReceiveEpoch:           seed.ReceiveEpoch,
+		}
+	}
+	for _, _ = range seedData {
+		<-connected
+	}
+	currentConnections := NewConnectionFile(current)
+	for _, seed := range seedData {
+		detected, err := currentConnections.DetectConnection(seed)
+		if !detected {
+			t.Errorf("failed to find %v in %v\n", seed, current)
+		}
+		if err != nil {
+			t.Errorf("error %v while trying to detect %v in %v\n ", err, seed, current)
+		}
+	}
+}

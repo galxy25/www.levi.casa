@@ -117,16 +117,18 @@ func SweepConnections(desired_connections string, current_connections string, do
 //      else
 //          no-op
 //          (☝🏾 will get reconciled on the next loop)
-func Connect(desired_connections string, current_connections string, connected chan<- *data.EmailConnect) {
+func Connect(desired_connections string, current_connections string, connected chan<- *data.EmailConnect, newConnections <-chan *data.EmailConnect) {
 	var wait_group sync.WaitGroup
 	// Create reader for persisted connection state
-	input_file, err := os.Open(desired_connections)
+	input_file, err := os.OpenFile(desired_connections, os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0644)
 	defer input_file.Close()
 	if err != nil {
 		package_logger.WithFields(log.Fields{
 			"resource": "io/file",
 			"executor": "#Connect",
-		}).Fatal(fmt.Sprintf("Failed to open %v", desired_connections))
+			"error":    err,
+			"io":       desired_connections,
+		}).Fatal("Failed to open file", desired_connections)
 		panic(err)
 	}
 	input_scanner := bufio.NewScanner(input_file)
@@ -165,11 +167,26 @@ func Connect(desired_connections string, current_connections string, connected c
 		}
 	}
 	wait_group.Wait()
+	go connectD(current_connections, connected, newConnections)
 }
 
 // --- END Globals ---
 
 // --- BEGIN Library ---
+func connectD(current_connections string, connected chan<- *data.EmailConnect, newConnections <-chan *data.EmailConnect) {
+	var waitGroup sync.WaitGroup
+	for {
+		select {
+		case newConnection, more := <-newConnections:
+			if !more {
+				return
+			}
+			waitGroup.Add(1)
+			go doEmailConnect(newConnection, current_connections, &waitGroup, connected)
+		}
+	}
+}
+
 // sweeperD sweeps made connections from desired_connections as they arrive on the
 // connected channel until a message on the done channel is received
 func sweeperD(desired_connections string, connected <-chan *data.EmailConnect, done <-chan struct{}) {

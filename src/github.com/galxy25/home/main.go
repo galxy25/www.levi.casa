@@ -30,6 +30,8 @@ var DESIRED_CONNECTIONS_FILEPATH = os.Getenv("DESIRED_CONNECTIONS_FILEPATH")
 // File path where current connection data is stored
 var CURRENT_CONNECTIONS_FILEPATH = os.Getenv("CURRENT_CONNECTIONS_FILEPATH")
 
+var newConnectionsQueue = make(chan *data.EmailConnect)
+
 // Endpoint represents an HTTP endpoint
 // exposed and serviced by home
 type Endpoint struct {
@@ -241,9 +243,11 @@ func main() {
 		// Where the buffer size is how far ahead
 		// we will allow the publishers to outrun
 		// the consumers of this channel
+		work := make(chan *data.EmailConnect, 10)
 		connected := make(chan *data.EmailConnect, 10)
 		defer close(done)
 		defer close(connected)
+		defer close(work)
 		for {
 			// Sweep!
 			//  for each desired connection in the input file
@@ -261,7 +265,7 @@ func main() {
 			//  else
 			//    no-op
 			//    (☝🏾 will get reconciled on the next loop)
-			communicator.Connect(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, connected)
+			communicator.Connect(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, connected, newConnectionsQueue)
 			// N.B. could do both Sweep! and Connect! concurrently
 			// but for frugality and programming for the
 			// average case doing them sequentially is correct
@@ -280,8 +284,8 @@ func main() {
 	// Engage and Segment audience
 	// go func() {
 	//      for {
-	//          go show.MapAudience(CURRENT_CONNECTIONS_FILEPATH)
-	//          go show.SegmentAudience(CURRENT_CONNECTIONS_FILEPATH)
+	//          go viewer.MapAudience(CURRENT_CONNECTIONS_FILEPATH)
+	//          go viewer.SegmentAudience(CURRENT_CONNECTIONS_FILEPATH)
 	//      }
 	// }()
 	// Run the web service for interested clients of levi.casa
