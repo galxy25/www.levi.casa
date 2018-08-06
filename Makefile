@@ -91,7 +91,7 @@ docker_clean :
 	docker volume rm $$(docker volume ls -qf dangling=true)
 
 docker_serve :
-	docker run -d -p $$CASA_PORT:$$CASA_PORT/tcp -v "$$(pwd)":/data --env-file Envfile galxy25/www.levi.casa:latest
+	docker run -d -p $$CASA_PORT:$$CASA_PORT/tcp -v "$$(pwd)/data":/data --env-file Envfile galxy25/www.levi.casa:latest
 
 clean :
 	echo "Cleaning"

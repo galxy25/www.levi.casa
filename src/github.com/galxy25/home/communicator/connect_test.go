@@ -3,7 +3,7 @@ package communicator
 import (
 	"errors"
 	"fmt"
-	data "github.com/galxy25/home/data"
+	"github.com/galxy25/home/data"
 	forEach "github.com/galxy25/home/internal/forEach"
 	io "github.com/galxy25/home/internal/io"
 	"os"
@@ -14,25 +14,25 @@ import (
 func defaultConnections() (connections []data.Connection) {
 	connections = []data.Connection{
 		data.Connection{
-			Connection:             "Salutations, Body, Farewell",
+			Message:                "Salutations, Body, Farewell",
 			ConnectionId:           "tester@test.com",
 			SubscribeToMailingList: false,
 			ReceiveEpoch:           1531622217,
 		},
 		data.Connection{
-			Connection:             "Farewell, Salutations, Body",
+			Message:                "Farewell, Salutations, Body",
 			ConnectionId:           "tester@test.com",
 			SubscribeToMailingList: false,
 			ReceiveEpoch:           1531622299,
 		},
 		data.Connection{
-			Connection:             "Body, Salutations, Farewell",
+			Message:                "Body, Salutations, Farewell",
 			ConnectionId:           "tester@test.com",
 			SubscribeToMailingList: false,
 			ReceiveEpoch:           1531622200,
 		},
 		data.Connection{
-			Connection:             "wow, whoa, well",
+			Message:                "wow, whoa, well",
 			ConnectionId:           "rando@randos.com",
 			SubscribeToMailingList: true,
 			ReceiveEpoch:           1531622369,
@@ -184,7 +184,7 @@ func TestSweepConnectionsSweepsNewlyMadeConnections(t *testing.T) {
 		currentConnections.Store(desiredConnection)
 		// Send the faux made connection to the sweeper
 		connected <- &data.Connection{
-			Connection:             desiredConnection.Connection,
+			Message:                desiredConnection.Message,
 			ConnectionId:           desiredConnection.ConnectionId,
 			SubscribeToMailingList: desiredConnection.SubscribeToMailingList,
 			ReceiveEpoch:           desiredConnection.ReceiveEpoch,
@@ -213,9 +213,9 @@ func TestConnectMakesConnections(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	saved := sns_publisher
-	defer func() { sns_publisher = saved }()
-	sns_publisher = func(message string) (resp interface{}, err error) {
+	saved := snsPublisher
+	defer func() { snsPublisher = saved }()
+	snsPublisher = func(message string) (resp interface{}, err error) {
 		return resp, err
 	}
 	connected := make(chan *data.Connection, len(seedData))
@@ -223,6 +223,12 @@ func TestConnectMakesConnections(t *testing.T) {
 	defer close(newConnectionsQueue)
 	defer close(connected)
 	Connect(desired, current, connected, newConnectionsQueue)
+	// Prevent data race of closing
+	// connected channel after the connection
+	// is persisted to file but not enqueued
+	for _, _ = range seedData {
+		<-connected
+	}
 	currentConnections := NewConnectionFile(current)
 	for _, seed := range seedData {
 		detected, err := currentConnections.DetectConnection(seed)
@@ -232,12 +238,6 @@ func TestConnectMakesConnections(t *testing.T) {
 		if err != nil {
 			t.Errorf("error %v while trying to detect %v in %v\n ", err, seed, current)
 		}
-	}
-	// Prevent data race of closing
-	// connected channel after the connection
-	// is persisted to file but not enqueued
-	for _, _ = range seedData {
-		<-connected
 	}
 }
 
@@ -255,9 +255,9 @@ func TestConnectReportsMadeConnections(t *testing.T) {
 	connected := make(chan *data.Connection, len(seedData))
 	newConnectionsQueue := make(chan *data.Connection)
 	defer close(newConnectionsQueue)
-	saved := sns_publisher
-	defer func() { sns_publisher = saved }()
-	sns_publisher = func(message string) (resp interface{}, err error) {
+	saved := snsPublisher
+	defer func() { snsPublisher = saved }()
+	snsPublisher = func(message string) (resp interface{}, err error) {
 		return resp, err
 	}
 	Connect(desired, current, connected, newConnectionsQueue)
@@ -296,9 +296,9 @@ func TestConnectConnectsNewConnections(t *testing.T) {
 	desired, current := "TestConnectConnectsNewConnections.desired", "TestConnectConnectsNewConnections.current"
 	defer os.Remove(desired)
 	defer os.Remove(current)
-	saved := sns_publisher
-	defer func() { sns_publisher = saved }()
-	sns_publisher = func(message string) (resp interface{}, err error) {
+	saved := snsPublisher
+	defer func() { snsPublisher = saved }()
+	snsPublisher = func(message string) (resp interface{}, err error) {
 		return resp, err
 	}
 	seedData := defaultConnections()
@@ -314,7 +314,7 @@ func TestConnectConnectsNewConnections(t *testing.T) {
 	}
 	for _, seed := range seedData {
 		newConnectionsQueue <- &data.Connection{
-			Connection:             seed.Connection,
+			Message:                seed.Message,
 			ConnectionId:           seed.ConnectionId,
 			SubscribeToMailingList: seed.SubscribeToMailingList,
 			ReceiveEpoch:           seed.ReceiveEpoch,

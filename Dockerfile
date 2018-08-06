@@ -14,11 +14,11 @@ ADD ./static /go/static
 ADD ./Makefile ./
 # Copy app environment file
 ADD ./Envfile ./
-# Build the levishouse command inside the container.
+# Build the home command inside the container.
 RUN make build
-# Run the levishouse command by default
+# Run the home command by default
 # when the container starts.
-ENTRYPOINT /go/bin/levishouse
+ENTRYPOINT /go/bin/home
 # Document that the service listens on port 8081.
 EXPOSE 8081
 # Run health checks against the web server's health endpoint

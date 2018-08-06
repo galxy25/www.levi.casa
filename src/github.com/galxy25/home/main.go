@@ -7,8 +7,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	communicator "github.com/galxy25/home/communicator"
-	data "github.com/galxy25/home/data"
+	"github.com/galxy25/home/communicator"
+	"github.com/galxy25/home/data"
 	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
@@ -17,20 +17,27 @@ import (
 	"time"
 )
 
-// --- BEGIN Globals ---
-
-// Initialize environment dependent variables
-var home_port, _ = strconv.Atoi(os.Getenv("CASA_PORT"))
+// Affirmative response to a health check
+const HealthCheckOk = "pong"
 
 // File path where desired connections data is stored
-var DESIRED_CONNECTIONS_FILEPATH = os.Getenv("DESIRED_CONNECTIONS_FILEPATH")
+var desiredConnectionsFilePath = os.Getenv("DESIRED_CONNECTIONS_FILEPATH")
 
 // File path where current connection data is stored
-var CURRENT_CONNECTIONS_FILEPATH = os.Getenv("CURRENT_CONNECTIONS_FILEPATH")
+var currentConnectionsFilePath = os.Getenv("CURRENT_CONNECTIONS_FILEPATH")
+
+// Port that web server should listen on
+var homePort, _ = strconv.Atoi(os.Getenv("CASA_PORT"))
 
 // In memory storage and signaling
-// of new connections to make
+// for new connections to make
 var newConnectionsQueue = make(chan *data.Connection)
+
+// Package logging context
+var packageLogger = log.WithFields(log.Fields{
+	"package": "home",
+	"file":    "main.go",
+})
 
 // Endpoint represents an HTTP endpoint
 // exposed and serviced by home
@@ -38,21 +45,9 @@ type Endpoint struct {
 	Path, Verb string
 }
 
-// Response represents an HTTP response
-// returned by a call to a home endpoint
-type Response struct {
-	Message    string `json:"message"`
-	StatusCode int    `json:"status_code"`
-	Error      string `json:"error"`
-	Json       string `json:"json"`
-}
-
-// Affirmative response to a health check
-const HEALTH_CHECK_OK = "pong"
-
 // Purposes and paths of
-// http endpoints
-var ENDPOINTS = map[string]Endpoint{
+// http Endpoints
+var Endpoints = map[string]Endpoint{
 	"BASE": Endpoint{
 		Path: "/",
 		Verb: "GET"},
@@ -67,17 +62,17 @@ var ENDPOINTS = map[string]Endpoint{
 		Verb: "GET"},
 }
 
-// Package logging context
-var package_logger = log.WithFields(log.Fields{
-	"package": "home",
-	"file":    "main.go",
-})
+// Response represents an HTTP response
+// returned by a call to a home endpoint
+type Response struct {
+	Message    string `json:"message"`
+	StatusCode int    `json:"status_code"`
+	Error      string `json:"error"`
+	Json       string `json:"json"`
+}
 
-// --- END Globals ---
-
-// --- BEGIN INIT ---
 // init configures:
-//   Project level logging
+//   Project level logging settings:
 //     Format: JSON
 // 	     Timestamp: RFC3339Nano
 //     Output: os.Stdout
@@ -92,35 +87,30 @@ func init() {
 	log.SetLevel(log.InfoLevel)
 }
 
-// --- END INIT ---
-
-// --- BEGIN Library ---
-// ping returns pong
-// HTTP health check handler
+// ping is the http handler for the health check endpoint,
+// returning HealthCheckOk if home is not on 🔥.
 func ping(w http.ResponseWriter, r *http.Request) {
 	// Let the interested party know
 	// we're still
 	// alive and kicking...it
 	// TODO: Implement a real health check
 	response := &Response{
-		Message:    HEALTH_CHECK_OK,
+		Message:    HealthCheckOk,
 		StatusCode: http.StatusOK}
 	w.Header().Set("Content-Type", "application/json")
+	// for no particular reason
 	w.WriteHeader(http.StatusTeapot)
 	json.NewEncoder(w).Encode(response)
 }
 
-// connect handles a clients
-// request to connect
+// connect handles a clients request to connect.
 func connect(w http.ResponseWriter, r *http.Request) {
 	// Record the time this connection was initiated
 	// 🤔 hmmm maybe the client should set and send this?
-	do_connect_timestamp := time.Now()
-	do_connect_epoch := do_connect_timestamp.Unix()
-	// Blindly decode the request
-	// as an email connection
-	var email_connection data.Connection
-	err := json.NewDecoder(r.Body).Decode(&email_connection)
+	doConnectTimestamp := time.Now()
+	doConnectEpoch := doConnectTimestamp.Unix()
+	var connection data.Connection
+	err := json.NewDecoder(r.Body).Decode(&connection)
 	if err != nil {
 		// Return to the user failure in
 		// persisting the desired connection
@@ -134,60 +124,64 @@ func connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Acquire connection publishing appendix
-	in_file, err := os.OpenFile(DESIRED_CONNECTIONS_FILEPATH, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	defer in_file.Close()
+	desiredConnections, err := os.OpenFile(desiredConnectionsFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer desiredConnections.Close()
 	if err != nil {
-		package_logger.WithFields(log.Fields{
+		packageLogger.WithFields(log.Fields{
 			"resource": "io/file",
 			"executor": "#connect",
 			"error":    err,
-			"io":       DESIRED_CONNECTIONS_FILEPATH,
-		}).Fatal("Failed to open file")
+			"io":       desiredConnectionsFilePath,
+		}).Fatal("failed to open file")
+		// TODO: log level=Error & return 5xx response
 	}
-	email_connection.ReceiveEpoch = do_connect_epoch
-	email_connection_data := email_connection.ToString()
+	connection.ReceiveEpoch = doConnectEpoch
+	connectionData := connection.ToString()
 	// Persist desired connection
-	_, err = in_file.WriteString(email_connection_data)
+	_, err = desiredConnections.WriteString(connectionData)
 	if err != nil {
-		package_logger.WithFields(log.Fields{
-			"resource":           "io/file",
-			"executor":           "#connect",
-			"command_parameters": email_connection_data,
-			"io_name":            DESIRED_CONNECTIONS_FILEPATH,
-		}).Fatal("Failed to persist desired connection")
+		packageLogger.WithFields(log.Fields{
+			"resource":   "io/file",
+			"executor":   "#connect",
+			"connection": connectionData,
+			"io":         desiredConnectionsFilePath,
+		}).Fatal("failed to persist desired connection")
+		// TODO: log level=Error & return 5xx response
 	}
 	go func() {
-		newConnectionsQueue <- &email_connection
+		newConnectionsQueue <- &connection
 	}()
 	// Return to the user success in
 	// persisting the desired connection
 	response := &Response{
 		Message:    "Connection initiated",
 		StatusCode: http.StatusAccepted}
-	response_bytes, _ := json.Marshal(email_connection)
-	response.Json = string(response_bytes)
+	responseBytes, _ := json.Marshal(connection)
+	response.Json = string(responseBytes)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(response)
 }
 
-// inbox returns the list of current connections
+// inbox returns the list of current connections.
 func inbox(w http.ResponseWriter, r *http.Request) {
 	var connections data.Connections
 	// Open current connections list
-	connection_file, err := os.OpenFile(CURRENT_CONNECTIONS_FILEPATH, os.O_CREATE|os.O_RDONLY, 0644)
-	defer connection_file.Close()
+	currentConnections, err := os.OpenFile(currentConnectionsFilePath, os.O_CREATE|os.O_RDONLY, 0644)
+	defer currentConnections.Close()
 	if err != nil {
-		package_logger.WithFields(log.Fields{
+		packageLogger.WithFields(log.Fields{
 			"resource": "io/file",
 			"executor": "#inbox",
-		}).Fatal(fmt.Sprintf("Failed to open %v", CURRENT_CONNECTIONS_FILEPATH))
+			"io":       currentConnectionsFilePath,
+		}).Fatal("failed to open file")
+		// TODO: log level=Error & return 5xx response
 	}
 	// Iterate over each connection and add to response
-	connection_scanner := bufio.NewScanner(connection_file)
-	connection_scanner.Split(bufio.ScanLines)
-	for connection_scanner.Scan() {
-		connection, err := data.ConnectionFromString(connection_scanner.Text())
+	connectionScanner := bufio.NewScanner(currentConnections)
+	connectionScanner.Split(bufio.ScanLines)
+	for connectionScanner.Scan() {
+		connection, err := data.ConnectionFromString(connectionScanner.Text())
 		if err != nil {
 			continue
 		}
@@ -198,100 +192,61 @@ func inbox(w http.ResponseWriter, r *http.Request) {
 		Message:    "Current connections",
 		StatusCode: http.StatusOK}
 	w.Header().Set("Content-Type", "application/json")
-	response_bytes, err := json.Marshal(connections)
-	response.Json = string(response_bytes)
+	responseBytes, err := json.Marshal(connections)
+	response.Json = string(responseBytes)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
 
 // jsonLoggingHandler wraps an HTTP handler and logs
-// the request, de-serializing the body as JSON
+// the request and JSON deserialzied body
 func jsonLoggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request_body interface{}
-		json.NewDecoder(r.Body).Decode(&request_body)
-		package_logger.WithFields(log.Fields{
+		var requestBody interface{}
+		json.NewDecoder(r.Body).Decode(&requestBody)
+		packageLogger.WithFields(log.Fields{
 			"request_method":    r.Method,
 			"request_uri":       r.RequestURI,
 			"requester_address": r.RemoteAddr,
 			"requester_host":    r.Host,
-			"request_body":      request_body,
-		}).Info("levi.casa")
+			"request_body":      requestBody,
+		}).Info("levi.casa request")
 		// Repopulate body with the data read
-		json_bytes := new(bytes.Buffer)
-		json.NewEncoder(json_bytes).Encode(request_body)
-		r.Body = ioutil.NopCloser(json_bytes)
+		jsonBytes := new(bytes.Buffer)
+		json.NewEncoder(jsonBytes).Encode(requestBody)
+		r.Body = ioutil.NopCloser(jsonBytes)
 		h.ServeHTTP(w, r)
 	})
 }
 
-// --- END Library ---
-
-// main
-//  runs the web service
-//  runs the connection reconciliation service
-//  runs the audience service
-// TODO: move each service into separate binary & docker image
+// main runs the web service and background communicator services
+// TODO: move communicator services into separate cmd/binary & docker images
 func main() {
 	httpd := http.NewServeMux()
 	// Serve web files in the static directory
-	httpd.Handle(ENDPOINTS["BASE"].Path, http.FileServer(http.Dir("./static")))
+	httpd.Handle(Endpoints["BASE"].Path, http.FileServer(http.Dir("./static")))
 	// Expose a health check endpoint
-	httpd.HandleFunc(ENDPOINTS["HEALTH"].Path, ping)
+	httpd.HandleFunc(Endpoints["HEALTH"].Path, ping)
 	// Expose an endpoint for connect requests
-	httpd.HandleFunc(ENDPOINTS["CONNECT"].Path, connect)
+	httpd.HandleFunc(Endpoints["CONNECT"].Path, connect)
 	// Expose an endpoint for inbox requests
-	httpd.HandleFunc(ENDPOINTS["INBOX"].Path, inbox)
-	// Start the connection reconciliation service
-	// for ensuring that all
-	// desired connections
-	// become
-	// realized connections
-	// TODO extract into separate cmd,binary, and docker image
-	// Buffer size is how far ahead
-	// we will allow the publishers to outrun
-	// the consumers of the channel
-	work := make(chan *data.Connection, 10)
-	connected := make(chan *data.Connection, 10)
-	defer close(connected)
-	defer close(work)
+	httpd.HandleFunc(Endpoints["INBOX"].Path, inbox)
+	// Buffered pre-maturely for performance
+	madeConnections := make(chan *data.Connection, 10)
+	defer close(madeConnections)
 	go func() {
-		// Sweep!
-		//  for each desired connection in the input file
-		//    verify it is not in the output file
-		//    if it is
-		//      remove it from the input file
-		//    else
-		//      leave it in the input file
-		// for each connection in connected
-		// Sweep!
-		communicator.SweepConnections(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, connected)
-		// Connect!
-		// for each desired connection in the input file
-		//  attempt to make the connection
-		//  if connection successful
-		//      write it to the output file
-		//  else
-		//    no-op
-		//    (☝🏾 will get reconciled on the next loop)
-		// for each connection in newConnectionsQueue
-		// Connect!
-		communicator.Connect(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, connected, newConnectionsQueue)
+		// Both functions spawn go-routines that run for the lifetime of main, and take channels
+		// for ensuring new connections are made and swept without having to busy poll
+		communicator.SweepConnections(desiredConnectionsFilePath, currentConnectionsFilePath, madeConnections)
+		communicator.Connect(desiredConnectionsFilePath, currentConnectionsFilePath, madeConnections, newConnectionsQueue)
 	}()
-	// TODO: Engage and Segment audience
-	// go func() {
-	//      for {
-	//          go viewer.MapAudience(CURRENT_CONNECTIONS_FILEPATH)
-	//          go viewer.SegmentAudience(CURRENT_CONNECTIONS_FILEPATH)
-	//      }
-	// }()
-	// Run the web service for interested clients of levi.casa
-	err := http.ListenAndServe(fmt.Sprintf(":%v", home_port), jsonLoggingHandler(httpd))
+	// Run the web service for interested clients of www.levi.casa
+	err := http.ListenAndServe(fmt.Sprintf(":%v", homePort), jsonLoggingHandler(httpd))
 	if err != nil {
-		package_logger.WithFields(log.Fields{
+		packageLogger.WithFields(log.Fields{
 			"resource": "io/port",
 			"executor": "#main",
-			"port":     home_port,
-		}).Fatal("Failed to run HTTP server")
+			"port":     homePort,
+		}).Fatal("failed to run HTTP server")
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	data "github.com/galxy25/home/data"
+	"github.com/galxy25/home/data"
 	helper "github.com/galxy25/home/internal/test"
 	"io/ioutil"
 	"net/http"
@@ -55,7 +55,7 @@ func (l *HomeTestProcess) Start() (err error) {
 	string_pid := strings.TrimSpace(strings.Split(sliced_output[len(sliced_output)-1], " ")[1])
 	// Set runtime values
 	l.pid, err = strconv.Atoi(string_pid)
-	l.host_port = home_port
+	l.host_port = homePort
 	l.host_name = "localhost"
 	if err != nil {
 		l.test_context.Logf("Failed to convert %v to int", string_pid)
@@ -135,7 +135,7 @@ func (l *HomeTestProcess) HealthCheck() (healthy bool, err error) {
 	// Parse health check response
 	ping_resp := castToResponse(resp)
 	// Check health check response
-	if ping_resp.Message == HEALTH_CHECK_OK && ping_resp.StatusCode == http.StatusOK {
+	if ping_resp.Message == HealthCheckOk && ping_resp.StatusCode == http.StatusOK {
 		healthy = true
 	}
 	return healthy, err
@@ -144,9 +144,9 @@ func (l *HomeTestProcess) HealthCheck() (healthy bool, err error) {
 // Call calls a home process
 // returning the call response and error
 func (l *HomeTestProcess) Call(method string, body interface{}) (response interface{}, err error) {
-	endpoint, exists := ENDPOINTS[method]
+	endpoint, exists := Endpoints[method]
 	if !exists {
-		return response, errors.New(fmt.Sprintf("No matching endpoint found for method: %v\n Valid endpoints are: %v\n", method, ENDPOINTS))
+		return response, errors.New(fmt.Sprintf("No matching endpoint found for method: %v\n Valid Endpoints are: %v\n", method, Endpoints))
 	}
 	response, err = l.client(endpoint, body)
 	return response, err
@@ -222,7 +222,7 @@ func TestHomeMakesConnectionInUnderOneSecond(t *testing.T) {
 	defer house_under_test.Terminate()
 	// Construct connection to make
 	connection := data.Connection{
-		Connection:             "Salutations,Body,Farewell",
+		Message:                "Salutations,Body,Farewell",
 		ConnectionId:           "tester@test.com",
 		SubscribeToMailingList: false,
 	}

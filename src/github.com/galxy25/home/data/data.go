@@ -1,6 +1,5 @@
-// Package data contains common elements
-// and eXecute In Place data structures
-// for www.levi.casa servers
+// Package data contains data structures
+// for use by www.levi.casa servers and clients
 package data
 
 import (
@@ -15,16 +14,16 @@ import (
 	"strings"
 )
 
-// Default anonymous user token, e.g a token's antonym
-const ANON_TOKER = "antonym"
+// default anonymous user token, c.g a token's antonym
+const anonToker = "antonym"
 
+// default user connections are sent to and from
 var toker = os.Getenv("TOKER")
 
-// Connection is the data for a
-// single email connection
+// Connection holds information needed to record, report, and link a connection
 type Connection struct {
 	// Contents of the connection
-	Connection string `json:"email_connect"`
+	Message string `json:"email_connect"`
 	// Address of the sender
 	ConnectionId string `json:"email_connect_id"`
 	// Whether the sender would like to auto-receive
@@ -36,44 +35,50 @@ type Connection struct {
 	ConnectEpoch int64 `json:"connect_epoch"`
 }
 
-func (e *Connection) baseString() (stringy string) {
-	encoded_message := hex.EncodeToString([]byte(e.Connection))
-	if e.ConnectionId == "" {
-		e.ConnectionId = fmt.Sprintf("%v:%v", ANON_TOKER, toker)
+// Connections are an array
+// of connections, useful in list responses
+type Connections struct {
+	Connections []Connection `json:"email_connections"`
+}
+
+func (c *Connection) baseString() (stringy string) {
+	encodedMessage := hex.EncodeToString([]byte(c.Message))
+	if c.ConnectionId == "" {
+		c.ConnectionId = fmt.Sprintf("%v:%v", anonToker, toker)
 	}
-	encodedConnectId := hex.EncodeToString([]byte(e.ConnectionId))
+	encodedConnectId := hex.EncodeToString([]byte(c.ConnectionId))
 	stringy = fmt.Sprintf("%v:%v %v %t %v", encodedConnectId,
 		toker,
-		encoded_message,
-		e.SubscribeToMailingList,
-		e.ReceiveEpoch)
+		encodedMessage,
+		c.SubscribeToMailingList,
+		c.ReceiveEpoch)
 	return stringy
 }
 
-func (e *Connection) ToString() (stringy string) {
-	base := e.baseString()
+func (c *Connection) ToString() (stringy string) {
+	base := c.baseString()
 	// We really care about whitespace because
 	// we're matching off of the string via grep
-	stringy = fmt.Sprintf("%v %v\n", base, e.ConnectEpoch)
+	stringy = fmt.Sprintf("%v %v\n", base, c.ConnectEpoch)
 	return stringy
 }
 
 // Matches returns bool indicating whether the current
 // connection matches the specified connection
-// Matches on 3-tuple of content, sender, send time
-func (e *Connection) Matches(other *Connection) (match bool) {
-	match = e.Connection == other.Connection && e.ConnectionId == other.ConnectionId && e.ReceiveEpoch == other.ReceiveEpoch
+// Matches on 3-tuple of message, sender, send time
+func (c *Connection) Matches(other *Connection) (match bool) {
+	match = c.Message == other.Message && c.ConnectionId == other.ConnectionId && c.ReceiveEpoch == other.ReceiveEpoch
 	return match
 }
 
-func (e *Connection) ExistsInFile(file string) (exists bool) {
+func (c *Connection) ExistsInFile(filePath string) (exists bool) {
 	// 🙏🏾🙏🏾🙏🏾
-	// https://nathanleclaire.com/blog/2014/12/29/shelled-out-commands-in-golang/
+	// https://nathanleclairc.com/blog/2014/12/29/shelled-out-commands-in-golang/
 	// search current connections for matching desired connection
 	cmdName := "grep"
-	cmdArgs := []string{"-iw", e.ToString(), file}
-	// i.e. grep -iw "here@go.com:sky SGVyZQ== false 1529615331" current_connections.txt
-	// -w https://unix.stackexchange.com/questions/206903/match-exact-string-using-grep
+	cmdArgs := []string{"-iw", c.ToString(), filePath}
+	// i.c. grep -iw "here@go.com:sky SGVyZQ== false 1529615331" current_connections.txt
+	// -w https://unix.stackexchangc.com/questions/206903/match-exact-string-using-grep
 	cmd := exec.Command(cmdName, cmdArgs...)
 	cmdReader, err := cmd.StdoutPipe()
 	if err != nil {
@@ -85,17 +90,17 @@ func (e *Connection) ExistsInFile(file string) (exists bool) {
 		fmt.Printf("Error starting Cmd: %v\n", err)
 		return exists
 	}
-	cmd_scanner := bufio.NewScanner(cmdReader)
-	cmd_scanner.Split(bufio.ScanLines)
+	cmdScanner := bufio.NewScanner(cmdReader)
+	cmdScanner.Split(bufio.ScanLines)
 	// Non-nil match was found for desired connection in file
-	for cmd_scanner.Scan() && !exists {
-		current_connection := cmd_scanner.Text()
-		connection_current, err := ConnectionFromString(current_connection)
+	for cmdScanner.Scan() && !exists {
+		currentLine := cmdScanner.Text()
+		connection, err := ConnectionFromString(currentLine)
 		if err != nil {
 			fmt.Println("Failed to convert persisted connection to struct")
 			return exists
 		}
-		exists = e.Matches(connection_current)
+		exists = c.Matches(connection)
 	}
 	// Wait waits until the grep command
 	// for a matching desired and current connection
@@ -108,55 +113,49 @@ func (e *Connection) ExistsInFile(file string) (exists bool) {
 	return exists
 }
 
-func ConnectionFromString(raw string) (email_connection *Connection, err error) {
-	persisted_connection := strings.Split(strings.Replace(raw, "\n", "", -1), " ")
+func ConnectionFromString(raw string) (connection *Connection, err error) {
+	persistedConnection := strings.Split(strings.Replace(raw, "\n", "", -1), " ")
 	// 4 because we expect connections to be serialized
-	// according to the data.Connection struct field order.
-	if len(persisted_connection) < 4 {
+	// according to the data.Message struct field order.
+	if len(persistedConnection) < 4 {
 		// TODO: Return named error
-		return email_connection, errors.New(fmt.Sprintf("Invalid persisted connection: %v", persisted_connection))
+		return connection, errors.New(fmt.Sprintf("Invalid persisted connection: %v", persistedConnection))
 	}
-	decoded_message, err := hex.DecodeString(persisted_connection[1])
+	decodedMessage, err := hex.DecodeString(persistedConnection[1])
 	if err != nil {
 		// TODO: Return named error
-		return email_connection, err
+		return connection, err
 	}
-	mailing_list_subscriber, err := strconv.ParseBool(persisted_connection[2])
+	subscribeToMailingList, err := strconv.ParseBool(persistedConnection[2])
 	if err != nil {
 		// TODO: Return named error
-		return email_connection, err
+		return connection, err
 	}
-	encoded_sender := strings.Split(persisted_connection[0], fmt.Sprintf(":%v", toker))[0]
-	decoded_sender, err := hex.DecodeString(encoded_sender)
+	encodedSender := strings.Split(persistedConnection[0], fmt.Sprintf(":%v", toker))[0]
+	decoded_sender, err := hex.DecodeString(encodedSender)
 	if err != nil {
 		// TODO: Return named error
-		return email_connection, err
+		return connection, err
 	}
-	receiveEpoch, err := strconv.ParseInt(persisted_connection[3], 10, 64)
+	receiveEpoch, err := strconv.ParseInt(persistedConnection[3], 10, 64)
 	if err != nil {
 		// TODO: Return named error
-		return email_connection, err
+		return connection, err
 	}
-	email_connection = &Connection{
+	connection = &Connection{
 		ConnectionId:           string(decoded_sender),
-		Connection:             string(decoded_message),
-		SubscribeToMailingList: mailing_list_subscriber,
+		Message:                string(decodedMessage),
+		SubscribeToMailingList: subscribeToMailingList,
 		ReceiveEpoch:           receiveEpoch}
-	if len(persisted_connection) > 4 {
-		connectEpoch, err := strconv.ParseInt(persisted_connection[4], 10, 64)
+	if len(persistedConnection) > 4 {
+		connectEpoch, err := strconv.ParseInt(persistedConnection[4], 10, 64)
 		if err != nil {
 			// TODO: Return named error
-			return email_connection, err
+			return connection, err
 		}
-		email_connection.ConnectEpoch = connectEpoch
+		connection.ConnectEpoch = connectEpoch
 	}
-	return email_connection, err
-}
-
-// Connections are an array
-// of connections
-type Connections struct {
-	Connections []Connection `json:"email_connections"`
+	return connection, err
 }
 
 // init configures:
