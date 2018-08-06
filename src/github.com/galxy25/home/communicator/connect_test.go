@@ -11,40 +11,40 @@ import (
 	"time"
 )
 
-func defaultEmailConnections() (emailConnections []data.EmailConnect) {
-	emailConnections = []data.EmailConnect{
-		data.EmailConnect{
-			EmailConnect:           "Salutations, Body, Farewell",
-			EmailConnectId:         "tester@test.com",
+func defaultConnections() (connections []data.Connection) {
+	connections = []data.Connection{
+		data.Connection{
+			Connection:             "Salutations, Body, Farewell",
+			ConnectionId:           "tester@test.com",
 			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622217",
+			ReceiveEpoch:           1531622217,
 		},
-		data.EmailConnect{
-			EmailConnect:           "Farewell, Salutations, Body",
-			EmailConnectId:         "tester@test.com",
+		data.Connection{
+			Connection:             "Farewell, Salutations, Body",
+			ConnectionId:           "tester@test.com",
 			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622299",
+			ReceiveEpoch:           1531622299,
 		},
-		data.EmailConnect{
-			EmailConnect:           "Body, Salutations, Farewell",
-			EmailConnectId:         "tester@test.com",
+		data.Connection{
+			Connection:             "Body, Salutations, Farewell",
+			ConnectionId:           "tester@test.com",
 			SubscribeToMailingList: false,
-			ReceiveEpoch:           "1531622200",
+			ReceiveEpoch:           1531622200,
 		},
-		data.EmailConnect{
-			EmailConnect:           "wow, whoa, well",
-			EmailConnectId:         "rando@randos.com",
+		data.Connection{
+			Connection:             "wow, whoa, well",
+			ConnectionId:           "rando@randos.com",
 			SubscribeToMailingList: true,
-			ReceiveEpoch:           "1531622369",
+			ReceiveEpoch:           1531622369,
 		},
 	}
-	return emailConnections
+	return connections
 }
 
-func castToConnection(a interface{}) (connection data.EmailConnect, err error) {
-	connection, ok := a.(data.EmailConnect)
+func castToConnection(a interface{}) (connection data.Connection, err error) {
+	connection, ok := a.(data.Connection)
 	if !ok {
-		return connection, errors.New(fmt.Sprintf("Unable to cast %v to a data.EmailConnect\n", a))
+		return connection, errors.New(fmt.Sprintf("Unable to cast %v to a data.Connection\n", a))
 	}
 	return connection, nil
 }
@@ -59,7 +59,7 @@ func SerializeConnection(deserialized interface{}) (serialized []byte, err error
 }
 
 func DeserializeConnection(serialized []byte) (deserialized interface{}, err error) {
-	connection, err := data.EmailConnectFromString(string(serialized))
+	connection, err := data.ConnectionFromString(string(serialized))
 	if err != nil {
 		return deserialized, err
 	}
@@ -80,7 +80,7 @@ func NewConnectionFile(filePath string) (file ConnectionFile) {
 	return ConnectionFile{sf}
 }
 
-func (c *ConnectionFile) WriteConnections(connections []data.EmailConnect) (err error) {
+func (c *ConnectionFile) WriteConnections(connections []data.Connection) (err error) {
 	for _, connection := range connections {
 		_, err = c.Store(connection)
 		if err != nil {
@@ -90,7 +90,7 @@ func (c *ConnectionFile) WriteConnections(connections []data.EmailConnect) (err 
 	return err
 }
 
-func (c *ConnectionFile) FindConnections(connections []data.EmailConnect) (found []data.EmailConnect, errs []error) {
+func (c *ConnectionFile) FindConnections(connections []data.Connection) (found []data.Connection, errs []error) {
 	finder, findErr := forEach.Select(c.All, func(item interface{}) (predicate bool, err error) {
 		connectionItem, err := castToConnection(item)
 		if err != nil {
@@ -122,7 +122,7 @@ func (c *ConnectionFile) FindConnections(connections []data.EmailConnect) (found
 	return found, errs
 }
 
-func (c *ConnectionFile) DetectConnection(connection data.EmailConnect) (detected bool, err error) {
+func (c *ConnectionFile) DetectConnection(connection data.Connection) (detected bool, err error) {
 	found, err := forEach.Detect(c.All, func(item interface{}) (predicate bool, err error) {
 		connectionItem, err := castToConnection(item)
 		if err != nil {
@@ -145,22 +145,20 @@ func TestSweepConnectionsSweepsMadeConnections(t *testing.T) {
 	defer os.Remove(current)
 	desiredConnections := NewConnectionFile(desired)
 	currentConnections := NewConnectionFile(current)
-	seedData := defaultEmailConnections()
+	seedData := defaultConnections()
 	err := desiredConnections.WriteConnections(seedData)
 	if err != nil {
 		t.Error(err)
 	}
-	done := make(chan struct{})
-	connected := make(chan *data.EmailConnect)
-	defer close(done)
+	connected := make(chan *data.Connection)
 	defer close(connected)
 	for _, desiredConnection := range seedData {
 		desiredConnections.Store(desiredConnection)
 		// fake a made connection
-		desiredConnection.ConnectEpoch = "2531622299"
+		desiredConnection.ConnectEpoch = 2531622299
 		currentConnections.Store(desiredConnection)
 	}
-	SweepConnections(desired, current, done, connected)
+	SweepConnections(desired, current, connected)
 	unConnected, errs := desiredConnections.FindConnections(seedData)
 	if len(unConnected) != 0 {
 		t.Errorf("failed to make these connections %v\n", unConnected)
@@ -172,24 +170,22 @@ func TestSweepConnectionsSweepsMadeConnections(t *testing.T) {
 
 func TestSweepConnectionsSweepsNewlyMadeConnections(t *testing.T) {
 	desired, current := "TestSweepConnectionsSweepsNewlyMadeConnections.desired", "TestSweepConnectionsSweepsNewlyMadeConnections.current"
-	done := make(chan struct{})
-	connected := make(chan *data.EmailConnect)
-	defer close(done)
+	connected := make(chan *data.Connection)
 	defer close(connected)
-	SweepConnections(desired, current, done, connected)
+	SweepConnections(desired, current, connected)
 	defer os.Remove(desired)
 	defer os.Remove(current)
 	desiredConnections := NewConnectionFile(desired)
 	currentConnections := NewConnectionFile(current)
-	seedData := defaultEmailConnections()
+	seedData := defaultConnections()
 	for _, desiredConnection := range seedData {
 		desiredConnections.Store(desiredConnection)
-		desiredConnection.ConnectEpoch = "2531622299"
+		desiredConnection.ConnectEpoch = 2531622299
 		currentConnections.Store(desiredConnection)
 		// Send the faux made connection to the sweeper
-		connected <- &data.EmailConnect{
-			EmailConnect:           desiredConnection.EmailConnect,
-			EmailConnectId:         desiredConnection.EmailConnectId,
+		connected <- &data.Connection{
+			Connection:             desiredConnection.Connection,
+			ConnectionId:           desiredConnection.ConnectionId,
 			SubscribeToMailingList: desiredConnection.SubscribeToMailingList,
 			ReceiveEpoch:           desiredConnection.ReceiveEpoch,
 		}
@@ -212,7 +208,7 @@ func TestConnectMakesConnections(t *testing.T) {
 	defer os.Remove(desired)
 	defer os.Remove(current)
 	desiredConnections := NewConnectionFile(desired)
-	seedData := defaultEmailConnections()
+	seedData := defaultConnections()
 	err := desiredConnections.WriteConnections(seedData)
 	if err != nil {
 		t.Error(err)
@@ -222,8 +218,8 @@ func TestConnectMakesConnections(t *testing.T) {
 	sns_publisher = func(message string) (resp interface{}, err error) {
 		return resp, err
 	}
-	connected := make(chan *data.EmailConnect, len(seedData))
-	newConnectionsQueue := make(chan *data.EmailConnect)
+	connected := make(chan *data.Connection, len(seedData))
+	newConnectionsQueue := make(chan *data.Connection)
 	defer close(newConnectionsQueue)
 	defer close(connected)
 	Connect(desired, current, connected, newConnectionsQueue)
@@ -237,6 +233,12 @@ func TestConnectMakesConnections(t *testing.T) {
 			t.Errorf("error %v while trying to detect %v in %v\n ", err, seed, current)
 		}
 	}
+	// Prevent data race of closing
+	// connected channel after the connection
+	// is persisted to file but not enqueued
+	for _, _ = range seedData {
+		<-connected
+	}
 }
 
 func TestConnectReportsMadeConnections(t *testing.T) {
@@ -245,13 +247,13 @@ func TestConnectReportsMadeConnections(t *testing.T) {
 	defer os.Remove(current)
 	desiredConnections := NewConnectionFile(desired)
 	currentConnections := NewConnectionFile(current)
-	seedData := defaultEmailConnections()
+	seedData := defaultConnections()
 	err := desiredConnections.WriteConnections(seedData)
 	if err != nil {
 		t.Error(err)
 	}
-	connected := make(chan *data.EmailConnect, len(seedData))
-	newConnectionsQueue := make(chan *data.EmailConnect)
+	connected := make(chan *data.Connection, len(seedData))
+	newConnectionsQueue := make(chan *data.Connection)
 	defer close(newConnectionsQueue)
 	saved := sns_publisher
 	defer func() { sns_publisher = saved }()
@@ -265,7 +267,7 @@ func TestConnectReportsMadeConnections(t *testing.T) {
 			t.Errorf("failed to find %v in %v\n", seed, current)
 		}
 	}
-	var connectionAlerts []data.EmailConnect
+	var connectionAlerts []data.Connection
 	for i := 0; i < len(seedData); i++ {
 		connectionAlerts = append(connectionAlerts, *(<-connected))
 	}
@@ -299,9 +301,9 @@ func TestConnectConnectsNewConnections(t *testing.T) {
 	sns_publisher = func(message string) (resp interface{}, err error) {
 		return resp, err
 	}
-	seedData := defaultEmailConnections()
-	connected := make(chan *data.EmailConnect, len(seedData))
-	newConnectionsQueue := make(chan *data.EmailConnect)
+	seedData := defaultConnections()
+	connected := make(chan *data.Connection, len(seedData))
+	newConnectionsQueue := make(chan *data.Connection)
 	defer close(newConnectionsQueue)
 	defer close(connected)
 	Connect(desired, current, connected, newConnectionsQueue)
@@ -311,9 +313,9 @@ func TestConnectConnectsNewConnections(t *testing.T) {
 		t.Error(err)
 	}
 	for _, seed := range seedData {
-		newConnectionsQueue <- &data.EmailConnect{
-			EmailConnect:           seed.EmailConnect,
-			EmailConnectId:         seed.EmailConnectId,
+		newConnectionsQueue <- &data.Connection{
+			Connection:             seed.Connection,
+			ConnectionId:           seed.ConnectionId,
 			SubscribeToMailingList: seed.SubscribeToMailingList,
 			ReceiveEpoch:           seed.ReceiveEpoch,
 		}

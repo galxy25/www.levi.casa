@@ -6,7 +6,6 @@ package communicator
 
 import (
 	"bufio"
-	"encoding/base64"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -16,9 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -63,7 +60,7 @@ var sns_publisher = func(message string) (resp interface{}, err error) {
 // by pushing them to the connected channel
 // sweeping will stop when a message is sent on
 // the done channel
-func SweepConnections(desired_connections string, current_connections string, done <-chan struct{}, connected <-chan *data.EmailConnect) {
+func SweepConnections(desired_connections string, current_connections string, connected <-chan *data.Connection) {
 	// Get iterator on desired_connections
 	input_file, err := os.OpenFile(desired_connections, os.O_RDONLY|os.O_CREATE, 0644)
 	defer input_file.Close()
@@ -73,16 +70,15 @@ func SweepConnections(desired_connections string, current_connections string, do
 			"executor": "#SweepConnections",
 			"error":    err,
 		}).Fatal(fmt.Sprintf("Failed to open %v", desired_connections))
-		panic(err)
 	}
 	// Iterate over desired_connections
 	input_scanner := bufio.NewScanner(input_file)
 	input_scanner.Split(bufio.ScanLines)
 	for input_scanner.Scan() {
-		// Check to see if iterated desired connection
+		// Check to see if desired connection
 		// is in the list of current connections
 		desired_connection := input_scanner.Text()
-		connection_desired, err := data.EmailConnectFromString(desired_connection)
+		connection_desired, err := data.ConnectionFromString(desired_connection)
 		if err != nil {
 			package_logger.WithFields(log.Fields{
 				"connection": desired_connection,
@@ -106,7 +102,7 @@ func SweepConnections(desired_connections string, current_connections string, do
 		}
 	}
 	// Sweep new connections as they occur
-	go sweeperD(desired_connections, connected, done)
+	go sweeperD(desired_connections, connected)
 }
 
 // Connect sends messages from one person to another
@@ -117,8 +113,7 @@ func SweepConnections(desired_connections string, current_connections string, do
 //      else
 //          no-op
 //          (☝🏾 will get reconciled on the next loop)
-func Connect(desired_connections string, current_connections string, connected chan<- *data.EmailConnect, newConnections <-chan *data.EmailConnect) {
-	var wait_group sync.WaitGroup
+func Connect(desired_connections string, current_connections string, connected chan<- *data.Connection, newConnections <-chan *data.Connection) {
 	// Create reader for persisted connection state
 	input_file, err := os.OpenFile(desired_connections, os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0644)
 	defer input_file.Close()
@@ -129,7 +124,6 @@ func Connect(desired_connections string, current_connections string, connected c
 			"error":    err,
 			"io":       desired_connections,
 		}).Fatal("Failed to open file", desired_connections)
-		panic(err)
 	}
 	input_scanner := bufio.NewScanner(input_file)
 	input_scanner.Split(bufio.ScanLines)
@@ -145,7 +139,7 @@ func Connect(desired_connections string, current_connections string, connected c
 			}).Info("Skipping empty connection")
 			continue
 		} else {
-			connection, err := data.EmailConnectFromString(current_line)
+			connection, err := data.ConnectionFromString(current_line)
 			if err != nil {
 				package_logger.WithFields(log.Fields{
 					"connection": current_line,
@@ -157,54 +151,48 @@ func Connect(desired_connections string, current_connections string, connected c
 			package_logger.WithFields(log.Fields{
 				"executor": "#Connect",
 				"resource": "io/channel",
-				// "io":       fmt.Sprintf("%v", socket_drain),
-				"io_value": connection,
-			}).Info("Sending email connection to channel for processing")
+				"io":       connection,
+			}).Info("Sending connection to channel for processing")
 			// Pass this connection to the
 			// buffered connection handler
-			go doEmailConnect(connection, current_connections, &wait_group, connected)
-			wait_group.Add(1)
+			go doConnection(connection, current_connections, connected)
 		}
 	}
-	wait_group.Wait()
 	go connectD(current_connections, connected, newConnections)
 }
 
 // --- END Globals ---
 
 // --- BEGIN Library ---
-func connectD(current_connections string, connected chan<- *data.EmailConnect, newConnections <-chan *data.EmailConnect) {
-	var waitGroup sync.WaitGroup
+func connectD(current_connections string, connected chan<- *data.Connection, newConnections <-chan *data.Connection) {
 	for {
 		select {
 		case newConnection, more := <-newConnections:
 			if !more {
 				return
 			}
-			waitGroup.Add(1)
-			go doEmailConnect(newConnection, current_connections, &waitGroup, connected)
+			go doConnection(newConnection, current_connections, connected)
 		}
 	}
 }
 
 // sweeperD sweeps made connections from desired_connections as they arrive on the
 // connected channel until a message on the done channel is received
-func sweeperD(desired_connections string, connected <-chan *data.EmailConnect, done <-chan struct{}) {
+func sweeperD(desired_connections string, connected <-chan *data.Connection) {
 	for {
 		select {
-		case <-done:
-			return
 		case made_connection, more := <-connected:
-			if more {
-				// Sweep the made connection
-				sweep_err := sweepConnection(made_connection, desired_connections)
-				if sweep_err == nil {
-					package_logger.WithFields(log.Fields{
-						"swept":      made_connection,
-						"swept_from": desired_connections,
-						"executor":   "#SweepConnections",
-					}).Info("Swept!")
-				}
+			if !more {
+				return
+			}
+			// Sweep the made connection
+			sweep_err := sweepConnection(made_connection, desired_connections)
+			if sweep_err == nil {
+				package_logger.WithFields(log.Fields{
+					"swept":      made_connection,
+					"swept_from": desired_connections,
+					"executor":   "#SweepConnections",
+				}).Info("Swept!")
 			}
 		}
 	}
@@ -212,11 +200,11 @@ func sweeperD(desired_connections string, connected <-chan *data.EmailConnect, d
 
 // sweepConnection sweeps a connection from a file
 // returning error if any
-func sweepConnection(connection *data.EmailConnect, sweep_file string) (err error) {
+func sweepConnection(connection *data.Connection, sweep_file string) (err error) {
 	sed_command := "sed"
 	// Sanitize input for sed by
-	// removing whitespace and lazily
-	// escaping sed regex characters
+	// removing whitespace & newlines,
+	// and escaping sed regex characters
 	// Put a backslash before $.*/[\]^
 	// and only those characters
 	// https://unix.stackexchange.com/questions/32907/what-characters-do-i-need-to-escape-when-using-sed-in-a-sh-script
@@ -225,10 +213,11 @@ func sweepConnection(connection *data.EmailConnect, sweep_file string) (err erro
 	// https://en.wikipedia.org/wiki/Base64
 	// HACK: Only doing '/' for now
 	// TODO: Escape all of $.*/[\]^
-	sed_safe_connection := strings.
-		Replace(connection.BaseString(), "/", "\\/", -1)
+	sed_safe_connection := strings.Replace(strings.
+		Replace(connection.ToString(), "/", "\\/", -1), "\n", "", -1)
 	sed_sweep_args := []string{"-i", fmt.Sprintf("s/%v//g", sed_safe_connection), sweep_file}
 	if runtime.GOOS == "darwin" {
+		// cuz, BSD ain't GNU
 		sed_sweep_args = []string{"-i", "", fmt.Sprintf("s/%v//g", sed_safe_connection), sweep_file}
 	}
 	//  Remove the realized from the desired
@@ -245,21 +234,20 @@ func sweepConnection(connection *data.EmailConnect, sweep_file string) (err erro
 	return err
 }
 
-// doEmailConnect makes email connections by
+// doConnection makes email connections by
 // sending me an email via AWS SNS
-func doEmailConnect(email_connection *data.EmailConnect, current_connections string, wait_group *sync.WaitGroup, connected chan<- *data.EmailConnect) {
-	defer wait_group.Done()
+func doConnection(email_connection *data.Connection, current_connections string, connected chan<- *data.Connection) {
 	package_logger.WithFields(log.Fields{
-		"executor":           "#doEmailConnect",
+		"executor":           "#doConnection",
 		"command_parameters": email_connection,
 	}).Info("Processing email connection to initiate")
-	message := email_connection.EmailConnect
+	message := email_connection.Connection
 	resp, err := sns_publisher(message)
 	if err != nil {
 		// Cast err to awserr.Error
 		// to get the Code and Message from an error.
 		package_logger.WithFields(log.Fields{
-			"executor":           "#doEmailConnect.#sns_publisher",
+			"executor":           "#doConnection.#sns_publisher",
 			"command_parameters": message,
 			"error":              err.Error(),
 		}).Error("Error making email connection")
@@ -267,60 +255,50 @@ func doEmailConnect(email_connection *data.EmailConnect, current_connections str
 	} else {
 		// Record the time this connection was made
 		so_connect_timestamp := time.Now()
-		so_connect_epoch := strconv.Itoa(int(so_connect_timestamp.Unix()))
+		so_connect_epoch := so_connect_timestamp.Unix()
 		email_connection.ConnectEpoch = so_connect_epoch
 		// Send processed email connection to
 		// next stage in pipeline
 		package_logger.WithFields(log.Fields{
-			"executor":           "#doEmailConnect.#sns_publisher",
+			"executor":           "#doConnection.#sns_publisher",
 			"command_parameters": email_connection,
 			"command_response":   resp,
 		}).Info("Successfully made email connection")
-		soEmailConnect(email_connection, current_connections, connected)
+		soConnection(email_connection, current_connections, connected)
 	}
 }
 
-// soEmailConnect does the things we do after an email connection
+// soConnection does the things we do after an email connection
 // answering the question: "You made an email connection. So what?"
-func soEmailConnect(current_connection *data.EmailConnect, current_connections string, connected chan<- *data.EmailConnect) {
+func soConnection(current_connection *data.Connection, current_connections string, connected chan<- *data.Connection) {
 	// Acquire connection publishing appendix
 	in_file, err := os.OpenFile(current_connections, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	defer in_file.Close()
 	if err != nil {
 		package_logger.WithFields(log.Fields{
 			"resource": "io/file",
-			"executor": "#soEmailConnect",
+			"executor": "#soConnection",
 			"io_name":  current_connections,
 		}).Fatal("Failed to open file")
-		panic(err)
 	}
 	package_logger.WithFields(log.Fields{
 		"resource": current_connection,
-		"executor": "#soEmailConnect",
+		"executor": "#soConnection",
 	}).Info("Processing email connection")
-	// extract to data.EmailConnect interface
-	// along with inline/ugly toStringing() below
-	encoded_message := base64.StdEncoding.EncodeToString([]byte(current_connection.EmailConnect))
-	email_connection_data := fmt.Sprintf("%v:%v %v %t %v %v\n", current_connection.EmailConnectId,
-		toker,
-		encoded_message,
-		current_connection.SubscribeToMailingList,
-		current_connection.ReceiveEpoch,
-		current_connection.ConnectEpoch)
+	email_connection_data := current_connection.ToString()
 	// Persist desired connection
 	_, err = in_file.WriteString(email_connection_data)
 	if err != nil {
 		package_logger.WithFields(log.Fields{
 			"resource":           "io/file",
-			"executor":           "#soEmailConnect",
+			"executor":           "#soConnection",
 			"command_parameters": email_connection_data,
 			"io_name":            current_connections,
 		}).Fatal("Failed to persist current email connection")
-		panic(err)
 	}
 	package_logger.WithFields(log.Fields{
 		"resource":           "io/file",
-		"executor":           "#soEmailConnect",
+		"executor":           "#soConnection",
 		"command_parameters": email_connection_data,
 		"io_name":            current_connections,
 	}).Info("Successfully persisted current email connection")

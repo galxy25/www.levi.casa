@@ -20,8 +20,6 @@ import (
 // --- BEGIN Globals ---
 
 // Initialize environment dependent variables
-var toker = os.Getenv("TOKER")
-
 var home_port, _ = strconv.Atoi(os.Getenv("CASA_PORT"))
 
 // File path where desired connections data is stored
@@ -30,7 +28,9 @@ var DESIRED_CONNECTIONS_FILEPATH = os.Getenv("DESIRED_CONNECTIONS_FILEPATH")
 // File path where current connection data is stored
 var CURRENT_CONNECTIONS_FILEPATH = os.Getenv("CURRENT_CONNECTIONS_FILEPATH")
 
-var newConnectionsQueue = make(chan *data.EmailConnect)
+// In memory storage and signaling
+// of new connections to make
+var newConnectionsQueue = make(chan *data.Connection)
 
 // Endpoint represents an HTTP endpoint
 // exposed and serviced by home
@@ -119,8 +119,20 @@ func connect(w http.ResponseWriter, r *http.Request) {
 	do_connect_epoch := do_connect_timestamp.Unix()
 	// Blindly decode the request
 	// as an email connection
-	var email_connection data.EmailConnect
-	json.NewDecoder(r.Body).Decode(&email_connection)
+	var email_connection data.Connection
+	err := json.NewDecoder(r.Body).Decode(&email_connection)
+	if err != nil {
+		// Return to the user failure in
+		// persisting the desired connection
+		response := &Response{
+			Message:    "Invalid connection sent",
+			StatusCode: http.StatusBadRequest}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 	// Acquire connection publishing appendix
 	in_file, err := os.OpenFile(DESIRED_CONNECTIONS_FILEPATH, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	defer in_file.Close()
@@ -128,11 +140,11 @@ func connect(w http.ResponseWriter, r *http.Request) {
 		package_logger.WithFields(log.Fields{
 			"resource": "io/file",
 			"executor": "#connect",
-		}).Fatal(fmt.Sprintf("Failed to open %v", DESIRED_CONNECTIONS_FILEPATH))
-		panic(err)
+			"error":    err,
+			"io":       DESIRED_CONNECTIONS_FILEPATH,
+		}).Fatal("Failed to open file")
 	}
-	email_connection.ReceiveEpoch = strconv.Itoa(int(do_connect_epoch))
-
+	email_connection.ReceiveEpoch = do_connect_epoch
 	email_connection_data := email_connection.ToString()
 	// Persist desired connection
 	_, err = in_file.WriteString(email_connection_data)
@@ -143,8 +155,10 @@ func connect(w http.ResponseWriter, r *http.Request) {
 			"command_parameters": email_connection_data,
 			"io_name":            DESIRED_CONNECTIONS_FILEPATH,
 		}).Fatal("Failed to persist desired connection")
-		panic(err)
 	}
+	go func() {
+		newConnectionsQueue <- &email_connection
+	}()
 	// Return to the user success in
 	// persisting the desired connection
 	response := &Response{
@@ -168,17 +182,16 @@ func inbox(w http.ResponseWriter, r *http.Request) {
 			"resource": "io/file",
 			"executor": "#inbox",
 		}).Fatal(fmt.Sprintf("Failed to open %v", CURRENT_CONNECTIONS_FILEPATH))
-		panic(err)
 	}
 	// Iterate over each connection and add to response
 	connection_scanner := bufio.NewScanner(connection_file)
 	connection_scanner.Split(bufio.ScanLines)
 	for connection_scanner.Scan() {
-		connection, err := data.EmailConnectFromString(connection_scanner.Text())
+		connection, err := data.ConnectionFromString(connection_scanner.Text())
 		if err != nil {
 			continue
 		}
-		connections.EmailConnections = append(connections.EmailConnections, *connection)
+		connections.Connections = append(connections.Connections, *connection)
 	}
 	// Return to the user all current connections
 	response := &Response{
@@ -204,8 +217,7 @@ func jsonLoggingHandler(h http.Handler) http.Handler {
 			"requester_host":    r.Host,
 			"request_body":      request_body,
 		}).Info("levi.casa")
-		// And now set a new body,
-		// which replicates the same data we read:
+		// Repopulate body with the data read
 		json_bytes := new(bytes.Buffer)
 		json.NewEncoder(json_bytes).Encode(request_body)
 		r.Body = ioutil.NopCloser(json_bytes)
@@ -231,57 +243,42 @@ func main() {
 	// Expose an endpoint for inbox requests
 	httpd.HandleFunc(ENDPOINTS["INBOX"].Path, inbox)
 	// Start the connection reconciliation service
-	// for ensuring
-	// with the monotonic progression of time and loop iterations
-	// that all
+	// for ensuring that all
 	// desired connections
 	// become
 	// realized connections
 	// TODO extract into separate cmd,binary, and docker image
+	// Buffer size is how far ahead
+	// we will allow the publishers to outrun
+	// the consumers of the channel
+	work := make(chan *data.Connection, 10)
+	connected := make(chan *data.Connection, 10)
+	defer close(connected)
+	defer close(work)
 	go func() {
-		done := make(chan struct{})
-		// Where the buffer size is how far ahead
-		// we will allow the publishers to outrun
-		// the consumers of this channel
-		work := make(chan *data.EmailConnect, 10)
-		connected := make(chan *data.EmailConnect, 10)
-		defer close(done)
-		defer close(connected)
-		defer close(work)
-		for {
-			// Sweep!
-			//  for each desired connection in the input file
-			//    verify it is not in the output file
-			//    if it is
-			//      remove it from the input file
-			//    else
-			//      leave it in the input file
-			communicator.SweepConnections(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, done, connected)
-			// Connect!
-			// for each desired connection in the input file
-			//  attempt to make the connection
-			//  if connection successful
-			//      write it to the output file
-			//  else
-			//    no-op
-			//    (☝🏾 will get reconciled on the next loop)
-			communicator.Connect(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, connected, newConnectionsQueue)
-			// N.B. could do both Sweep! and Connect! concurrently
-			// but for frugality and programming for the
-			// average case doing them sequentially is correct
-			// as it avoids API calls
-			// to check on the status of connections that are in progress
-			// N.B. an in memory implementation of this should
-			// use streaming queries and channels
-			// versus persistent(e.g. stale) files
-			// to map and communicate connection state
-			// but current cost model favors
-			// cheap local storage
-			// over
-			// metered requests and bandwidth
-		}
+		// Sweep!
+		//  for each desired connection in the input file
+		//    verify it is not in the output file
+		//    if it is
+		//      remove it from the input file
+		//    else
+		//      leave it in the input file
+		// for each connection in connected
+		// Sweep!
+		communicator.SweepConnections(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, connected)
+		// Connect!
+		// for each desired connection in the input file
+		//  attempt to make the connection
+		//  if connection successful
+		//      write it to the output file
+		//  else
+		//    no-op
+		//    (☝🏾 will get reconciled on the next loop)
+		// for each connection in newConnectionsQueue
+		// Connect!
+		communicator.Connect(DESIRED_CONNECTIONS_FILEPATH, CURRENT_CONNECTIONS_FILEPATH, connected, newConnectionsQueue)
 	}()
-	// Engage and Segment audience
+	// TODO: Engage and Segment audience
 	// go func() {
 	//      for {
 	//          go viewer.MapAudience(CURRENT_CONNECTIONS_FILEPATH)
@@ -296,6 +293,5 @@ func main() {
 			"executor": "#main",
 			"port":     home_port,
 		}).Fatal("Failed to run HTTP server")
-		panic(err)
 	}
 }

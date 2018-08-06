@@ -5,7 +5,7 @@ package data
 
 import (
 	"bufio"
-	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -20,67 +20,53 @@ const ANON_TOKER = "antonym"
 
 var toker = os.Getenv("TOKER")
 
-// IsEmpty returns bool as to whether string s is empty.
-// TODO: extract => levisutils
-func isEmpty(s *string) (empty bool) {
-	return *s == ""
-}
-
-// EmailConnect is the data for a
+// Connection is the data for a
 // single email connection
-type EmailConnect struct {
-	// Contents of the email message
-	EmailConnect string `json:"email_connect"`
+type Connection struct {
+	// Contents of the connection
+	Connection string `json:"email_connect"`
 	// Address of the sender
-	EmailConnectId string `json:"email_connect_id"`
+	ConnectionId string `json:"email_connect_id"`
 	// Whether the sender would like to auto-receive
 	// email connections related to this connection
 	SubscribeToMailingList bool `json:"subscribe_to_mailing_list"`
 	// Time message was received from the sender
-	ReceiveEpoch string `json:"receive_epoch"`
+	ReceiveEpoch int64 `json:"receive_epoch"`
 	// Time message was sent to the receiver
-	ConnectEpoch string `json:"connect_epoch"`
+	ConnectEpoch int64 `json:"connect_epoch"`
 }
 
-func (e *EmailConnect) BaseString() (stringy string) {
-	encoded_message := base64.StdEncoding.EncodeToString([]byte(e.EmailConnect))
-	if isEmpty(&e.EmailConnectId) {
-		stringy = fmt.Sprintf("%v:%v %v %t %v", ANON_TOKER,
-			toker,
-			encoded_message,
-			e.SubscribeToMailingList,
-			e.ReceiveEpoch)
-	} else {
-		stringy = fmt.Sprintf("%v:%v %v %t %v", e.EmailConnectId,
-			toker,
-			encoded_message,
-			e.SubscribeToMailingList,
-			e.ReceiveEpoch)
+func (e *Connection) baseString() (stringy string) {
+	encoded_message := hex.EncodeToString([]byte(e.Connection))
+	if e.ConnectionId == "" {
+		e.ConnectionId = fmt.Sprintf("%v:%v", ANON_TOKER, toker)
 	}
+	encodedConnectId := hex.EncodeToString([]byte(e.ConnectionId))
+	stringy = fmt.Sprintf("%v:%v %v %t %v", encodedConnectId,
+		toker,
+		encoded_message,
+		e.SubscribeToMailingList,
+		e.ReceiveEpoch)
 	return stringy
 }
 
-func (e *EmailConnect) ToString() (stringy string) {
-	base := e.BaseString()
+func (e *Connection) ToString() (stringy string) {
+	base := e.baseString()
 	// We really care about whitespace because
 	// we're matching off of the string via grep
-	if isEmpty(&e.ConnectEpoch) {
-		stringy = fmt.Sprintf("%v\n", base)
-	} else {
-		stringy = fmt.Sprintf("%v %v\n", base, e.ConnectEpoch)
-	}
+	stringy = fmt.Sprintf("%v %v\n", base, e.ConnectEpoch)
 	return stringy
 }
 
 // Matches returns bool indicating whether the current
 // connection matches the specified connection
 // Matches on 3-tuple of content, sender, send time
-func (e *EmailConnect) Matches(other *EmailConnect) (match bool) {
-	match = e.EmailConnect == other.EmailConnect && e.EmailConnectId == other.EmailConnectId && e.ReceiveEpoch == other.ReceiveEpoch
+func (e *Connection) Matches(other *Connection) (match bool) {
+	match = e.Connection == other.Connection && e.ConnectionId == other.ConnectionId && e.ReceiveEpoch == other.ReceiveEpoch
 	return match
 }
 
-func (e *EmailConnect) ExistsInFile(file string) (exists bool) {
+func (e *Connection) ExistsInFile(file string) (exists bool) {
 	// 🙏🏾🙏🏾🙏🏾
 	// https://nathanleclaire.com/blog/2014/12/29/shelled-out-commands-in-golang/
 	// search current connections for matching desired connection
@@ -104,7 +90,7 @@ func (e *EmailConnect) ExistsInFile(file string) (exists bool) {
 	// Non-nil match was found for desired connection in file
 	for cmd_scanner.Scan() && !exists {
 		current_connection := cmd_scanner.Text()
-		connection_current, err := EmailConnectFromString(current_connection)
+		connection_current, err := ConnectionFromString(current_connection)
 		if err != nil {
 			fmt.Println("Failed to convert persisted connection to struct")
 			return exists
@@ -122,36 +108,55 @@ func (e *EmailConnect) ExistsInFile(file string) (exists bool) {
 	return exists
 }
 
-func EmailConnectFromString(raw string) (email_connection *EmailConnect, err error) {
-	// Read persisted connection
-	// into an EmailConnection interface
-	// TODO, add this as an interface method
-	persisted_connection := strings.Split(raw, " ")
-	// HACKs to stop runtime panics
-	// due to blindly reading any garbage line in desired
-	// as a valid connection
+func ConnectionFromString(raw string) (email_connection *Connection, err error) {
+	persisted_connection := strings.Split(strings.Replace(raw, "\n", "", -1), " ")
 	// 4 because we expect connections to be serialized
-	// according to the data.EmailConnect struct field order.
+	// according to the data.Connection struct field order.
 	if len(persisted_connection) < 4 {
+		// TODO: Return named error
 		return email_connection, errors.New(fmt.Sprintf("Invalid persisted connection: %v", persisted_connection))
 	}
-	decoded_message, _ := base64.StdEncoding.DecodeString(persisted_connection[1])
-	mailing_list_subscriber, _ := strconv.ParseBool(persisted_connection[2])
-	email_connection = &EmailConnect{
-		EmailConnectId:         strings.Split(persisted_connection[0], fmt.Sprintf(":%v", toker))[0],
-		EmailConnect:           string(decoded_message),
+	decoded_message, err := hex.DecodeString(persisted_connection[1])
+	if err != nil {
+		// TODO: Return named error
+		return email_connection, err
+	}
+	mailing_list_subscriber, err := strconv.ParseBool(persisted_connection[2])
+	if err != nil {
+		// TODO: Return named error
+		return email_connection, err
+	}
+	encoded_sender := strings.Split(persisted_connection[0], fmt.Sprintf(":%v", toker))[0]
+	decoded_sender, err := hex.DecodeString(encoded_sender)
+	if err != nil {
+		// TODO: Return named error
+		return email_connection, err
+	}
+	receiveEpoch, err := strconv.ParseInt(persisted_connection[3], 10, 64)
+	if err != nil {
+		// TODO: Return named error
+		return email_connection, err
+	}
+	email_connection = &Connection{
+		ConnectionId:           string(decoded_sender),
+		Connection:             string(decoded_message),
 		SubscribeToMailingList: mailing_list_subscriber,
-		ReceiveEpoch:           persisted_connection[3]}
+		ReceiveEpoch:           receiveEpoch}
 	if len(persisted_connection) > 4 {
-		email_connection.ConnectEpoch = persisted_connection[4]
+		connectEpoch, err := strconv.ParseInt(persisted_connection[4], 10, 64)
+		if err != nil {
+			// TODO: Return named error
+			return email_connection, err
+		}
+		email_connection.ConnectEpoch = connectEpoch
 	}
 	return email_connection, err
 }
 
-// Connections is the data for
-// collections of EmailConnect's
+// Connections are an array
+// of connections
 type Connections struct {
-	EmailConnections []EmailConnect `json:"email_connections"`
+	Connections []Connection `json:"email_connections"`
 }
 
 // init configures:

@@ -216,14 +216,14 @@ func TestItRunsAndStops(t *testing.T) {
 
 // E2E integration test
 // connection -> home => connected
-func TestHomeMakesEmailConnectionInUnderOneSecond(t *testing.T) {
+func TestHomeMakesConnectionInUnderOneSecond(t *testing.T) {
 	test_house := HomeTestProcess{test_context: t}
 	house_under_test, _ := helper.ExecuteTestProcess(&test_house)
 	defer house_under_test.Terminate()
 	// Construct connection to make
-	connection := data.EmailConnect{
-		EmailConnect:           "Salutations,Body,Farewell",
-		EmailConnectId:         "tester@test.com",
+	connection := data.Connection{
+		Connection:             "Salutations,Body,Farewell",
+		ConnectionId:           "tester@test.com",
 		SubscribeToMailingList: false,
 	}
 	// Send connection to home
@@ -231,7 +231,7 @@ func TestHomeMakesEmailConnectionInUnderOneSecond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\nFailed to initiate connection %v\n%v\n", err, connection, resp)
 	}
-	var persisted_connection data.EmailConnect
+	var persisted_connection data.Connection
 	err = json.Unmarshal([]byte(castToResponse(resp).Json), &persisted_connection)
 	if err != nil {
 		t.Errorf("connect endpoint responded with invalid connection response: %v\n%v\n", resp, err)
@@ -244,7 +244,7 @@ func TestHomeMakesEmailConnectionInUnderOneSecond(t *testing.T) {
 	for tries > 0 && !match {
 		resp, err = house_under_test.Call("INBOX", nil)
 		err = json.Unmarshal([]byte(castToResponse(resp).Json), &connections)
-		for _, connected := range connections.EmailConnections {
+		for _, connected := range connections.Connections {
 			if connected.Matches(&persisted_connection) {
 				match = true
 				break
