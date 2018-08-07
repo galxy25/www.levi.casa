@@ -122,21 +122,22 @@ To stop and start the go web server process
 $> make docker_restart
 ```
 
-##Clean
+## Clean
 
-##Deploy
+## Deploy
+
+To deploy tagged docker image v2 on an environment where docker image v2 is running, run:
 
 ```
-$> make docker_tag VERSION=latest
-
-$> make docker_push
-
-$> ssh SomeOtherServer
-
-$> docker pull galxy25/www.levi.casa
-
-$> docker run -d -p 8081:8081/tcp -v "$(pwd)/data":/data --env-file Envfile galxy25/www.levi.casa:latest
+$> ./deploy.sh v2 v1
 ```
+
+To force a deployment of v2 even if v1 is not running
+
+```
+$> ./deploy.sh v2 v1 force
+```
+
 Envfile must have valid values for
 
 * AWS_DEFAULT_REGION
@@ -144,3 +145,8 @@ Envfile must have valid values for
 * AWS_SECRET_ACCESS_KEY
 
 along with valid/the same values as located in this repo's Envfile
+for deployed app to be functional
+
+```
+$> ./deploy.sh v2 v1
+```
