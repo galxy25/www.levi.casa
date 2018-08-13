@@ -222,7 +222,7 @@ func TestHomeMakesConnectionInUnderOneSecond(t *testing.T) {
 	defer house_under_test.Terminate()
 	// Construct connection to make
 	connection := data.Connection{
-		Message:                "Salutations,Body,Farewell",
+		Message:                helper.RandomString(100),
 		ConnectionId:           "tester@test.com",
 		SubscribeToMailingList: false,
 	}
@@ -245,7 +245,7 @@ func TestHomeMakesConnectionInUnderOneSecond(t *testing.T) {
 		resp, err = house_under_test.Call("INBOX", nil)
 		err = json.Unmarshal([]byte(castToResponse(resp).Json), &connections)
 		for _, connected := range connections.Connections {
-			if connected.Matches(&persisted_connection) {
+			if connected.Equals(&persisted_connection) {
 				match = true
 				break
 			}
@@ -260,3 +260,7 @@ func TestHomeMakesConnectionInUnderOneSecond(t *testing.T) {
 		t.Fatalf("Test connection %v \n not present in list of connections %v ", persisted_connection, connections)
 	}
 }
+
+func TestHomeReconcilesUnlinkedConnectionsOnStartup(t *testing.T) {}
+
+func TestHomeReconcileOnStartupNoOpsForLinkedConnections(t *testing.T) {}

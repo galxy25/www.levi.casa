@@ -3,13 +3,11 @@
 package data
 
 import (
-	"bufio"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -38,7 +36,7 @@ type Connection struct {
 // Connections are an array
 // of connections, useful in list responses
 type Connections struct {
-	Connections []Connection `json:"email_connections"`
+	Connections []*Connection `json:"email_connections"`
 }
 
 func (c *Connection) baseString() (stringy string) {
@@ -55,7 +53,7 @@ func (c *Connection) baseString() (stringy string) {
 	return stringy
 }
 
-func (c *Connection) ToString() (stringy string) {
+func (c *Connection) String() (stringy string) {
 	base := c.baseString()
 	// We really care about whitespace because
 	// we're matching off of the string via grep
@@ -63,54 +61,13 @@ func (c *Connection) ToString() (stringy string) {
 	return stringy
 }
 
-// Matches returns bool indicating whether the current
+// Equals returns bool indicating whether the
 // connection matches the specified connection
-// Matches on 3-tuple of message, sender, send time
-func (c *Connection) Matches(other *Connection) (match bool) {
-	match = c.Message == other.Message && c.ConnectionId == other.ConnectionId && c.ReceiveEpoch == other.ReceiveEpoch
-	return match
-}
-
-func (c *Connection) ExistsInFile(filePath string) (exists bool) {
-	// 🙏🏾🙏🏾🙏🏾
-	// https://nathanleclairc.com/blog/2014/12/29/shelled-out-commands-in-golang/
-	// search current connections for matching desired connection
-	cmdName := "grep"
-	cmdArgs := []string{"-iw", c.ToString(), filePath}
-	// i.c. grep -iw "here@go.com:sky SGVyZQ== false 1529615331" current_connections.txt
-	// -w https://unix.stackexchangc.com/questions/206903/match-exact-string-using-grep
-	cmd := exec.Command(cmdName, cmdArgs...)
-	cmdReader, err := cmd.StdoutPipe()
-	if err != nil {
-		fmt.Printf("Error creating StdoutPipe for Cmd: %v\n", err)
-		return exists
-	}
-	err = cmd.Start()
-	if err != nil {
-		fmt.Printf("Error starting Cmd: %v\n", err)
-		return exists
-	}
-	cmdScanner := bufio.NewScanner(cmdReader)
-	cmdScanner.Split(bufio.ScanLines)
-	// Non-nil match was found for desired connection in file
-	for cmdScanner.Scan() && !exists {
-		currentLine := cmdScanner.Text()
-		connection, err := ConnectionFromString(currentLine)
-		if err != nil {
-			fmt.Println("Failed to convert persisted connection to struct")
-			return exists
-		}
-		exists = c.Matches(connection)
-	}
-	// Wait waits until the grep command
-	// for a matching desired and current connection
-	// finishes cleanly and ensures
-	// closure of any pipes siphoning from it's output.
-	err = cmd.Wait()
-	if err != nil {
-		// Ignoring as grep returns non-zero if no match found
-	}
-	return exists
+// Matches on 3-tuple of:
+// message, sender, send time.
+func (c *Connection) Equals(other *Connection) (equal bool) {
+	equal = c.Message == other.Message && c.ConnectionId == other.ConnectionId && c.ReceiveEpoch == other.ReceiveEpoch
+	return equal
 }
 
 func ConnectionFromString(raw string) (connection *Connection, err error) {

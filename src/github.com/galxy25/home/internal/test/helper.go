@@ -1,6 +1,9 @@
 package internal
 
-import ( /* 👏🏾🔙 */ )
+import (
+	"math/rand"
+	"time"
+)
 
 // A TestProcess is-a process
 // intended to be executed by some
@@ -47,4 +50,18 @@ func (t *TestProcess) Terminate() (err error) {
 	// TODO:
 	// Add timeout and retry ability
 	return t.Stop()
+}
+
+const characterSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// RandomString returns a random string of
+// length length from characterSet.
+// https://www.calhoun.io/6-tips-for-using-strings-in-go/
+func RandomString(length int) string {
+	source := rand.NewSource(time.Now().UnixNano())
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = characterSet[source.Int63()%int64(len(characterSet))]
+	}
+	return string(b)
 }

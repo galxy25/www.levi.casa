@@ -31,10 +31,13 @@ func (s *SerializedLFile) All(cancel <-chan struct{}) (all chan forEach.Each, er
 	go func() {
 		defer close(all)
 		defer file.Close()
-		scanner := bufio.NewScanner(file)
-		scanner.Split(bufio.ScanLines)
-		for scanner.Scan() {
-			deserialized, desErr := s.Deserialize(scanner.Bytes())
+		reader := bufio.NewReader(file)
+		for {
+			currentLine, readErr := reader.ReadBytes('\n')
+			if readErr != nil {
+				return
+			}
+			deserialized, desErr := s.Deserialize(currentLine)
 			select {
 			case <-cancel:
 				return

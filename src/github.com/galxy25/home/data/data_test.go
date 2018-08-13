@@ -36,6 +36,6 @@ func TestConnectionFromStringFailsIfEmailAddressIsInvalid(t *testing.T) {
 }
 
 func TestConnectionToStringSucceedsWithValidInput(t *testing.T) {
-	validDesiredConnection.ToString()
-	validDesiredConnection2.ToString()
+	_ = validDesiredConnection.String()
+	_ = validDesiredConnection2.String()
 }

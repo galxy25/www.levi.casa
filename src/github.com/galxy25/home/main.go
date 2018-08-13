@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -29,9 +28,9 @@ var currentConnectionsFilePath = os.Getenv("CURRENT_CONNECTIONS_FILEPATH")
 // Port that web server should listen on
 var homePort, _ = strconv.Atoi(os.Getenv("CASA_PORT"))
 
-// In memory storage and signaling
-// for new connections to make
-var newConnectionsQueue = make(chan *data.Connection)
+// Communicator used to receive and send
+// connections
+var comm = communicator.NewCommunicator(desiredConnectionsFilePath, currentConnectionsFilePath)
 
 // Package logging context
 var packageLogger = log.WithFields(log.Fields{
@@ -71,93 +70,82 @@ type Response struct {
 	Json       string `json:"json"`
 }
 
-// init configures:
+// init main configures:
 //   Project level logging settings:
 //     Format: JSON
 // 	     Timestamp: RFC3339Nano
 //     Output: os.Stdout
 //     Level:  INFO
 func init() {
-	// Log as JSON instead of the default ASCII formatter.
 	log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.RFC3339Nano})
-	// Output to stdout instead of the default stderr
-	// N.B.: Could be any io.Writer
 	log.SetOutput(os.Stdout)
-	// Only log at level INFO
 	log.SetLevel(log.InfoLevel)
 }
 
 // ping is the http handler for the health check endpoint,
 // returning HealthCheckOk if home is not on 🔥.
 func ping(w http.ResponseWriter, r *http.Request) {
-	// Let the interested party know
-	// we're still
-	// alive and kicking...it
-	// TODO: Implement a real health check
+	// TODO: Implement a real health check, i.e. connection queue size
 	response := &Response{
 		Message:    HealthCheckOk,
 		StatusCode: http.StatusOK}
 	w.Header().Set("Content-Type", "application/json")
-	// for no particular reason
-	w.WriteHeader(http.StatusTeapot)
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
 
 // connect handles a clients request to connect.
 func connect(w http.ResponseWriter, r *http.Request) {
-	// Record the time this connection was initiated
-	// 🤔 hmmm maybe the client should set and send this?
-	doConnectTimestamp := time.Now()
-	doConnectEpoch := doConnectTimestamp.Unix()
-	var connection data.Connection
+	connectTimestamp := time.Now()
+	connectEpoch := connectTimestamp.Unix()
+	var connection *data.Connection
 	err := json.NewDecoder(r.Body).Decode(&connection)
 	if err != nil {
-		// Return to the user failure in
-		// persisting the desired connection
 		response := &Response{
 			Message:    "Invalid connection sent",
 			StatusCode: http.StatusBadRequest}
-
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	// Acquire connection publishing appendix
-	desiredConnections, err := os.OpenFile(desiredConnectionsFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	defer desiredConnections.Close()
+	connection.ReceiveEpoch = connectEpoch
+	err = comm.Record(connection)
 	if err != nil {
 		packageLogger.WithFields(log.Fields{
-			"resource": "io/file",
-			"executor": "#connect",
-			"error":    err,
-			"io":       desiredConnectionsFilePath,
-		}).Fatal("failed to open file")
-		// TODO: log level=Error & return 5xx response
-	}
-	connection.ReceiveEpoch = doConnectEpoch
-	connectionData := connection.ToString()
-	// Persist desired connection
-	_, err = desiredConnections.WriteString(connectionData)
-	if err != nil {
-		packageLogger.WithFields(log.Fields{
-			"resource":   "io/file",
-			"executor":   "#connect",
-			"connection": connectionData,
-			"io":         desiredConnectionsFilePath,
-		}).Fatal("failed to persist desired connection")
-		// TODO: log level=Error & return 5xx response
+			"executor":   "#connect#Communicator.#Record",
+			"connection": connection,
+			"error":      err,
+		}).Error("failed to record new connection")
+		response := &Response{
+			Message:    "Error processing connection",
+			StatusCode: http.StatusInternalServerError}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
 	}
 	go func() {
-		newConnectionsQueue <- &connection
+		// TODO: keep count of number of in flight connections
+		connected, err := comm.Link(connection)
+		// TODO: record link latency
+		if err != nil {
+			packageLogger.WithFields(log.Fields{
+				"executor":   "#Communicator.#Link",
+				"connection": connection,
+				"error":      err,
+			}).Error("failed to link new connection")
+		}
+		packageLogger.WithFields(log.Fields{
+			"executor":   "#Communicator.#Link",
+			"connection": connected,
+		}).Info("linked connection")
 	}()
-	// Return to the user success in
-	// persisting the desired connection
 	response := &Response{
 		Message:    "Connection initiated",
 		StatusCode: http.StatusAccepted}
 	responseBytes, _ := json.Marshal(connection)
 	response.Json = string(responseBytes)
+	packageLogger.Info(fmt.Sprintf("sending back %v", response.Json))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(response)
@@ -166,28 +154,23 @@ func connect(w http.ResponseWriter, r *http.Request) {
 // inbox returns the list of current connections.
 func inbox(w http.ResponseWriter, r *http.Request) {
 	var connections data.Connections
-	// Open current connections list
-	currentConnections, err := os.OpenFile(currentConnectionsFilePath, os.O_CREATE|os.O_RDONLY, 0644)
-	defer currentConnections.Close()
+	stop := make(chan struct{})
+	defer close(stop)
+	currentConnections, err := comm.ReportLinked(stop)
 	if err != nil {
 		packageLogger.WithFields(log.Fields{
-			"resource": "io/file",
 			"executor": "#inbox",
-			"io":       currentConnectionsFilePath,
-		}).Fatal("failed to open file")
-		// TODO: log level=Error & return 5xx response
+			"error":    err,
+		}).Error("failed to generate inbox")
+		return
 	}
-	// Iterate over each connection and add to response
-	connectionScanner := bufio.NewScanner(currentConnections)
-	connectionScanner.Split(bufio.ScanLines)
-	for connectionScanner.Scan() {
-		connection, err := data.ConnectionFromString(connectionScanner.Text())
-		if err != nil {
-			continue
-		}
-		connections.Connections = append(connections.Connections, *connection)
+	for connection := range currentConnections {
+		connections.Connections = append(connections.Connections, connection)
 	}
-	// Return to the user all current connections
+	packageLogger.WithFields(log.Fields{
+		"executor": "#inbox",
+		"mail":     connections.Connections,
+	}).Info(fmt.Sprintf("inbox has %v items", len(connections.Connections)))
 	response := &Response{
 		Message:    "Current connections",
 		StatusCode: http.StatusOK}
@@ -199,7 +182,7 @@ func inbox(w http.ResponseWriter, r *http.Request) {
 }
 
 // jsonLoggingHandler wraps an HTTP handler and logs
-// the request and JSON deserialzied body
+// the request and de-serialized JSON body
 func jsonLoggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var requestBody interface{}
@@ -220,7 +203,7 @@ func jsonLoggingHandler(h http.Handler) http.Handler {
 }
 
 // main runs the web service and background communicator services
-// TODO: move communicator services into separate cmd/binary & docker images
+// TODO: extract communicator service into separate cmd/binary & docker images
 func main() {
 	httpd := http.NewServeMux()
 	// Serve web files in the static directory
@@ -231,16 +214,26 @@ func main() {
 	httpd.HandleFunc(Endpoints["CONNECT"].Path, connect)
 	// Expose an endpoint for inbox requests
 	httpd.HandleFunc(Endpoints["INBOX"].Path, inbox)
-	// Buffered pre-maturely for performance
-	madeConnections := make(chan *data.Connection, 10)
-	defer close(madeConnections)
+	// If there are any unconnected connections
+	// from a previous run, connect them
 	go func() {
-		// Both functions spawn go-routines that run for the lifetime of main, and take channels
-		// for ensuring new connections are made and swept without having to busy poll
-		communicator.SweepConnections(desiredConnectionsFilePath, currentConnectionsFilePath, madeConnections)
-		communicator.Connect(desiredConnectionsFilePath, currentConnectionsFilePath, madeConnections, newConnectionsQueue)
+		reconciled, err := comm.Reconcile()
+		if err != nil {
+			packageLogger.WithFields(log.Fields{
+				"resource":   "communicator",
+				"executor":   "#Communicator.#Reconcile",
+				"reconciled": reconciled,
+				"error":      err,
+			}).Panic("failed to reconcile previous connections")
+		}
+		packageLogger.WithFields(log.Fields{
+			"resource":   "communicator",
+			"executor":   "#Communicator.#Reconcile",
+			"reconciled": reconciled,
+		}).Info("reconciled connections")
 	}()
-	// Run the web service for interested clients of www.levi.casa
+	// Run web service for clients
+	// of www.levi.casa
 	err := http.ListenAndServe(fmt.Sprintf(":%v", homePort), jsonLoggingHandler(httpd))
 	if err != nil {
 		packageLogger.WithFields(log.Fields{
