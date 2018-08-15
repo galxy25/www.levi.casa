@@ -1,7 +1,6 @@
 package internal
 
-import ( /* 👏🏾🔙 */
-)
+import ( /* 👏🏾🔙 */ )
 
 type Each struct {
 	Item interface{}

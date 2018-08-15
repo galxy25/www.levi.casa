@@ -30,7 +30,6 @@ var snsPublisher = func(message string) (resp interface{}, err error) {
 // Configure package logging context
 var packageLogger = log.WithFields(log.Fields{
 	"package": "home/communicator",
-	"file":    "communicator.go",
 })
 
 // Communicator implements functionality
@@ -127,7 +126,12 @@ func (c *Communicator) Reconcile() (reconciled []*data.Connection, err error) {
 	for _, connection := range unlinked {
 		connected, err := c.Link(connection)
 		if err != nil {
-			break
+			packageLogger.WithFields(log.Fields{
+				"executor":   "#Reconcile.#Link",
+				"connection": connection,
+				"err":        err,
+			}).Error("failed to link connection")
+			continue
 		}
 		reconciled = append(reconciled, connected)
 	}

@@ -106,6 +106,7 @@ function do_connect(trigger_element) {
     }
     // Alert user to connection failure
     function on_failure(data){
+        trigger_element.textContent = "Send";
         alert(`Failed: ${JSON.stringify(data)}`);
     }
 }

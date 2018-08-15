@@ -9,7 +9,7 @@ RUN apk add --update make
 # Copy the server src files to the containers go directory
 ADD ./src /go/src/
 # Copy the client files to the containers web server directory
-ADD ./static /go/static
+ADD ./web /go/web
 # Copy the services build file to the containers working directory
 ADD ./Makefile ./
 # Copy app environment file

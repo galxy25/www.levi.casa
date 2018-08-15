@@ -45,7 +45,7 @@ type Endpoint struct {
 }
 
 // Purposes and paths of
-// http Endpoints
+// HTTP Endpoints
 var Endpoints = map[string]Endpoint{
 	"BASE": Endpoint{
 		Path: "/",
@@ -58,6 +58,9 @@ var Endpoints = map[string]Endpoint{
 		Verb: "POST"},
 	"INBOX": Endpoint{
 		Path: "/inbox",
+		Verb: "GET"},
+	"METRICS": Endpoint{
+		Path: "/stats",
 		Verb: "GET"},
 }
 
@@ -82,7 +85,7 @@ func init() {
 	log.SetLevel(log.InfoLevel)
 }
 
-// ping is the http handler for the health check endpoint,
+// ping is the HTTP handler for the health check endpoint,
 // returning HealthCheckOk if home is not on 🔥.
 func ping(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement a real health check, i.e. connection queue size
@@ -107,6 +110,10 @@ func connect(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(response)
+		return
+	}
+	if len(connection.Message) == 0 {
+		errorResponse(w, "Connection must have message content", nil, http.StatusBadRequest)
 		return
 	}
 	connection.ReceiveEpoch = connectEpoch
@@ -145,7 +152,6 @@ func connect(w http.ResponseWriter, r *http.Request) {
 		StatusCode: http.StatusAccepted}
 	responseBytes, _ := json.Marshal(connection)
 	response.Json = string(responseBytes)
-	packageLogger.Info(fmt.Sprintf("sending back %v", response.Json))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(response)
@@ -181,6 +187,41 @@ func inbox(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// stats handles HTTP request to the /stats endpoint
+// returning statics about the current home process
+func stats(w http.ResponseWriter, r *http.Request) {
+	metrics := make(map[string]int64)
+	var unlinked, linked int64
+	stop := make(chan struct{})
+	defer close(stop)
+	desiredConnections, err := comm.ReportUnlinked(stop)
+	if err != nil {
+		errorResponse(w, "error trying to count unlinked connections", nil, http.StatusInternalServerError)
+		return
+	}
+	currentConnections, err := comm.ReportLinked(stop)
+	if err != nil {
+		errorResponse(w, "error trying to count linked connections", nil, http.StatusInternalServerError)
+		return
+	}
+	for _ = range desiredConnections {
+		unlinked++
+	}
+	for _ = range currentConnections {
+		linked++
+	}
+	metrics["unlinked"] = unlinked
+	metrics["linked"] = linked
+	response := &Response{
+		Message:    "dez metrics",
+		StatusCode: http.StatusNonAuthoritativeInfo}
+	w.Header().Set("Content-Type", "application/json")
+	responseBytes, err := json.Marshal(metrics)
+	response.Json = string(responseBytes)
+	w.WriteHeader(http.StatusNonAuthoritativeInfo)
+	json.NewEncoder(w).Encode(response)
+}
+
 // jsonLoggingHandler wraps an HTTP handler and logs
 // the request and de-serialized JSON body
 func jsonLoggingHandler(h http.Handler) http.Handler {
@@ -202,14 +243,31 @@ func jsonLoggingHandler(h http.Handler) http.Handler {
 	})
 }
 
+// errorResponse constructs and writes
+// an HTTP response with the provided
+// message, error, and status code
+func errorResponse(w http.ResponseWriter, msg string, err error, statusCode int) {
+	response := &Response{
+		Message:    msg,
+		StatusCode: statusCode}
+	if err != nil {
+		response.Error = err.Error()
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(response)
+}
+
 // main runs the web service and background communicator services
 // TODO: extract communicator service into separate cmd/binary & docker images
 func main() {
 	httpd := http.NewServeMux()
 	// Serve web files in the static directory
-	httpd.Handle(Endpoints["BASE"].Path, http.FileServer(http.Dir("./static")))
-	// Expose a health check endpoint
+	httpd.Handle(Endpoints["BASE"].Path, http.FileServer(http.Dir("./web")))
+	// Expose an endpoint for health check requests
 	httpd.HandleFunc(Endpoints["HEALTH"].Path, ping)
+	// Expose an endpoint for process metric requests
+	httpd.HandleFunc(Endpoints["METRICS"].Path, stats)
 	// Expose an endpoint for connect requests
 	httpd.HandleFunc(Endpoints["CONNECT"].Path, connect)
 	// Expose an endpoint for inbox requests

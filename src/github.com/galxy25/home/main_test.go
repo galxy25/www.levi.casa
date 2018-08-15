@@ -6,7 +6,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/galxy25/home/communicator"
 	"github.com/galxy25/home/data"
+	await "github.com/galxy25/home/internal/await"
 	helper "github.com/galxy25/home/internal/test"
 	"io/ioutil"
 	"net/http"
@@ -20,7 +22,7 @@ import (
 )
 
 // Path to test executables dir for use by the test run
-var project_root = flag.String("project_root", "", "App root directory for the package under test")
+var projectRoot = flag.String("project_root", "", "App root directory for the package under test")
 
 // An instance of the home process
 // executed as part of integration testing
@@ -39,7 +41,7 @@ func (l *HomeTestProcess) Start() (err error) {
 	// we could fail to start our test server
 	// yet still get a healthy response from
 	// a previous instance
-	run_cmd := exec.Command("sh", "-c", fmt.Sprintf("make restart -f %v/Makefile -C %v", *project_root, *project_root))
+	run_cmd := exec.Command("sh", "-c", fmt.Sprintf("make restart -f %v/Makefile -C %v", *projectRoot, *projectRoot))
 	out, err := run_cmd.CombinedOutput()
 	if err != nil {
 		l.test_context.Logf("Failed to run home: %v, %v", string(out), err)
@@ -83,7 +85,7 @@ func (l *HomeTestProcess) Stop() (err error) {
 		return errors.New("kill -s 0 on home returned non nil, unable to stop non-running server.")
 	}
 	// Stop the process
-	stop_cmd := exec.Command("sh", "-c", fmt.Sprintf("make stop -f %v/Makefile -C %v", *project_root, *project_root))
+	stop_cmd := exec.Command("sh", "-c", fmt.Sprintf("make stop -f %v/Makefile -C %v", *projectRoot, *projectRoot))
 	out, err := stop_cmd.CombinedOutput()
 	if err != nil {
 		l.test_context.Logf("Failed to stop home: %v, %v", string(out), err)
@@ -261,6 +263,108 @@ func TestHomeMakesConnectionInUnderOneSecond(t *testing.T) {
 	}
 }
 
-func TestHomeReconcilesUnlinkedConnectionsOnStartup(t *testing.T) {}
+// Test on restart unmade connections get made
+func TestHomeReconcilesUnlinkedConnectionsOnStartup(t *testing.T) {
+	connections := []*data.Connection{
+		&data.Connection{
+			Message:                helper.RandomString(100),
+			ConnectionId:           "tester@test.com",
+			SubscribeToMailingList: false,
+			ReceiveEpoch:           time.Now().Unix(),
+		},
+		&data.Connection{
+			Message:                helper.RandomString(100),
+			ConnectionId:           "tester@test.com",
+			SubscribeToMailingList: true,
+			ReceiveEpoch:           time.Now().Unix(),
+		},
+	}
+	desiredConnectionsFile := communicator.NewConnectionFile(fmt.Sprintf("%v/%v", *projectRoot, desiredConnectionsFilePath))
+	err := desiredConnectionsFile.WriteConnections(connections)
+	if err != nil {
+		t.Errorf("failed to write connections %v to %v", connections, desiredConnectionsFilePath)
+	}
+	test_house := HomeTestProcess{test_context: t}
+	house_under_test, _ := helper.ExecuteTestProcess(&test_house)
+	defer house_under_test.Terminate()
+	var madeConnections data.Connections
+	connectionsMade := func() (made bool, err error) {
+		resp, err := house_under_test.Call("INBOX", nil)
+		if err != nil {
+			return made, err
+		}
+		err = json.Unmarshal([]byte(castToResponse(resp).Json), &madeConnections)
+		if err != nil {
+			return made, err
+		}
+		for _, connection := range connections {
+			made = false
+			for _, connected := range madeConnections.Connections {
+				if connected.Equals(connection) {
+					made = true
+					break
+				}
+			}
+			if !made {
+				return made, err
+			}
+		}
+		return made, err
+	}
+	cancel := make(chan struct{})
+	defer close(cancel)
+	made, err := await.Await(connectionsMade, cancel)
+	if err != nil {
+		t.Error(err)
+	}
+	if !made {
+		var unmadeConnections []*data.Connection
+		unlinkedIterator, _ := comm.ReportUnlinked(cancel)
+		for unlinked := range unlinkedIterator {
+			unmadeConnections = append(unmadeConnections, unlinked)
+		}
+		t.Errorf("failed to connect all of %v\n current unmade connections %v\n", connections, unmadeConnections)
+	}
+}
 
-func TestHomeReconcileOnStartupNoOpsForLinkedConnections(t *testing.T) {}
+func TestHomeReconcileOnStartupNoOpsForLinkedConnections(t *testing.T) {
+	connections := []*data.Connection{
+		&data.Connection{
+			Message:                helper.RandomString(100),
+			ConnectionId:           "tester@test.com",
+			SubscribeToMailingList: false,
+			ReceiveEpoch:           time.Now().Unix(),
+		},
+		&data.Connection{
+			Message:                helper.RandomString(100),
+			ConnectionId:           "tester@test.com",
+			SubscribeToMailingList: true,
+			ReceiveEpoch:           time.Now().Unix(),
+		},
+	}
+	desiredConnectionsFile := communicator.NewConnectionFile(fmt.Sprintf("%v/%v", *projectRoot, desiredConnectionsFilePath))
+	err := desiredConnectionsFile.WriteConnections(connections)
+	if err != nil {
+		t.Errorf("failed to write connections %v to %v", connections, desiredConnectionsFilePath)
+	}
+	currentConnectionFile := communicator.NewConnectionFile(fmt.Sprintf("%v/%v", *projectRoot, currentConnectionsFilePath))
+	err = currentConnectionFile.WriteConnections(connections)
+	if err != nil {
+		t.Errorf("failed to write connections %v to %v", connections, currentConnectionsFilePath)
+	}
+	test_house := HomeTestProcess{test_context: t}
+	house_under_test, _ := helper.ExecuteTestProcess(&test_house)
+	defer house_under_test.Terminate()
+	resp, err := house_under_test.Call("METRICS", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	metrics := make(map[string]int64)
+	err = json.Unmarshal([]byte(castToResponse(resp).Json), &metrics)
+	if err != nil {
+		t.Error(err)
+	}
+	if metrics["unlinked"] != metrics["linked"] {
+		t.Errorf("expected same number of linked and unlinked connections, got %v\n", metrics)
+	}
+}
