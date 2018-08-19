@@ -17,6 +17,10 @@ function update_displayed_date(){
     $("#current-date > a").text(current_date);
     $("#current-time > a").text(current_time);
 }
+// For local development/avoiding infinite routing loops
+if (window.location.hostname === "localhost") {
+    $("#desk-cam")[0].src = "http://10.0.0.139:8080";
+}
 
 // REACT
 
@@ -149,12 +153,12 @@ function extract_and_reset_connection_request(field_extract_reset_xips){
 // Returns the input value for the specified
 // HTML element
 function extract_element_value(selector, index, accesor){
-    // $('#email-connect')[0].value;
-    return Function('return $("' + selector + '")[' + index+'].' +accesor)();
+    // i.e. $('#email-connect')[0].value;
+    return Function('return $("' + selector + '")[' + index +'].' + accesor)();
 }
 // Sets the display value for the specified
 // HTML element
 function reset_element_value(selector, index, accesor, reset){
-    // $("#subscribe-to-mailing-list")[0].checked = false;
-    return Function('return $("' + selector + '")[' + index+'].' +accesor + '=' + reset)();
+    // i.e. $("#subscribe-to-mailing-list")[0].checked = false;
+    return Function('return $("' + selector + '")[' + index +'].' + accesor + '=' + reset)();
 }

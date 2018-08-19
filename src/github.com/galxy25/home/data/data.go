@@ -55,16 +55,15 @@ func (c *Connection) baseString() (stringy string) {
 
 func (c *Connection) String() (stringy string) {
 	base := c.baseString()
-	// We really care about whitespace because
-	// we're matching off of the string via grep
+	// TODO: remove newline from returned string, callers can add it as needed.
 	stringy = fmt.Sprintf("%v %v\n", base, c.ConnectEpoch)
 	return stringy
 }
 
 // Equals returns bool indicating whether the
-// connection matches the specified connection
+// connection matches the other connection
 // Matches on 3-tuple of:
-// message, sender, send time.
+// message, sender, receive time.
 func (c *Connection) Equals(other *Connection) (equal bool) {
 	equal = c.Message == other.Message && c.ConnectionId == other.ConnectionId && c.ReceiveEpoch == other.ReceiveEpoch
 	return equal

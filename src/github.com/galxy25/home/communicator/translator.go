@@ -52,7 +52,7 @@ func NewConnectionFile(filePath string) (file ConnectionFile) {
 	return ConnectionFile{sf}
 }
 
-// WriteConnection writes connection to a
+// WriteConnection writes a connection to a
 // ConnectionFile, returning error (if any).
 func (c *ConnectionFile) WriteConnection(connection *data.Connection) (err error) {
 	_, err = c.Store(connection)
@@ -63,12 +63,30 @@ func (c *ConnectionFile) WriteConnection(connection *data.Connection) (err error
 // ConnectionFile, returning error(if any).
 func (c *ConnectionFile) WriteConnections(connections []*data.Connection) (err error) {
 	for _, connection := range connections {
-		_, err = c.Store(connection)
+		err = c.WriteConnection(connection)
 		if err != nil {
 			return err
 		}
 	}
 	return err
+}
+
+// FindConnection returns bool indicating whether
+// connection was found in ConnectionFile
+// additionally returning error (if any).
+func (c *ConnectionFile) FindConnection(connection *data.Connection) (detected bool, err error) {
+	_, err = forEach.Detect(c.All, func(item interface{}) (predicate bool, err error) {
+		connectionItem, err := castAsConnectionPtr(item)
+		if err != nil {
+			return predicate, err
+		}
+		if connectionItem.Equals(connection) {
+			detected = true
+			predicate = true
+		}
+		return predicate, err
+	})
+	return detected, err
 }
 
 // FindConnections finds all connections
@@ -105,26 +123,6 @@ func (c *ConnectionFile) FindConnections(connections []*data.Connection) (found 
 
 	}
 	return found, errs
-}
-
-// FindConnection finds and returns the first
-// matching connection  in Connection file for
-// the given connection, returning error (if any).
-func (c *ConnectionFile) FindConnection(connection *data.Connection) (detected bool, err error) {
-	found, err := forEach.Detect(c.All, func(item interface{}) (predicate bool, err error) {
-		connectionItem, err := castAsConnectionPtr(item)
-		if err != nil {
-			return predicate, err
-		}
-		if connectionItem.Equals(connection) {
-			predicate = true
-		}
-		return predicate, err
-	})
-	if found != nil {
-		detected = true
-	}
-	return detected, err
 }
 
 // Each lazily returns each connection
@@ -172,5 +170,5 @@ func castAsConnectionPtr(a interface{}) (connection *data.Connection, err error)
 		// TODO: return named error
 		return connection, errors.New(fmt.Sprintf("Unable to cast %v to a *data.Connection\n", a))
 	}
-	return connection, nil
+	return connection, err
 }

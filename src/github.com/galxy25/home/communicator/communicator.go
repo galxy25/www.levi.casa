@@ -131,6 +131,7 @@ func (c *Communicator) Reconcile() (reconciled []*data.Connection, err error) {
 				"connection": connection,
 				"err":        err,
 			}).Error("failed to link connection")
+			// TODO: return [] of unreconciled?
 			continue
 		}
 		reconciled = append(reconciled, connected)

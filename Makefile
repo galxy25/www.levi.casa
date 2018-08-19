@@ -27,7 +27,7 @@ build : lint
 test : lint build
 	echo "Testing"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go test -v -timeout 3s -cover --race -args -project_root=$(PWD); \
+		go test -v -timeout 5s -cover --race -args -project_root=$(PWD); \
 		cd communicator; \
 		go test -v -timeout 10s -cover --race; \
 		cd ../data; \

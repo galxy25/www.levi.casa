@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"fmt"
+	"github.com/galxy25/home/data"
 	"math/rand"
 	"time"
 )
@@ -64,4 +66,24 @@ func RandomString(length int) string {
 		b[i] = characterSet[source.Int63()%int64(len(characterSet))]
 	}
 	return string(b)
+}
+
+// RandomConnection returns a pointer to a
+// randomly generated valid Connection.
+func RandomConnection() (connection *data.Connection) {
+	connectEpoch := time.Now()
+	var subscriber bool
+	if (connectEpoch.Unix() % 2) == 0 {
+		subscriber = true
+	} else {
+		subscriber = false
+	}
+	connection = &data.Connection{
+		Message:                RandomString(100),
+		ConnectionId:           fmt.Sprintf("%v@%v", RandomString(10), RandomString(10)),
+		SubscribeToMailingList: subscriber,
+		ConnectEpoch:           connectEpoch.Unix(),
+		ReceiveEpoch:           connectEpoch.Add(time.Second).Unix(),
+	}
+	return connection
 }
