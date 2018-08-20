@@ -21,9 +21,9 @@ var toker = os.Getenv("TOKER")
 // Connection holds information needed to record, report, and link a connection
 type Connection struct {
 	// Contents of the connection
-	Message string `json:"email_connect"`
+	Message string `json:"message"`
 	// Address of the sender
-	ConnectionId string `json:"email_connect_id"`
+	Sender string `json:"sender"`
 	// Whether the sender would like to auto-receive
 	// email connections related to this connection
 	SubscribeToMailingList bool `json:"subscribe_to_mailing_list"`
@@ -36,15 +36,15 @@ type Connection struct {
 // Connections are an array
 // of connections, useful in list responses
 type Connections struct {
-	Connections []*Connection `json:"email_connections"`
+	Connections []*Connection `json:"connections"`
 }
 
 func (c *Connection) baseString() (stringy string) {
 	encodedMessage := hex.EncodeToString([]byte(c.Message))
-	if c.ConnectionId == "" {
-		c.ConnectionId = fmt.Sprintf("%v:%v", anonToker, toker)
+	if c.Sender == "" {
+		c.Sender = fmt.Sprintf("%v:%v", anonToker, toker)
 	}
-	encodedConnectId := hex.EncodeToString([]byte(c.ConnectionId))
+	encodedConnectId := hex.EncodeToString([]byte(c.Sender))
 	stringy = fmt.Sprintf("%v:%v %v %t %v", encodedConnectId,
 		toker,
 		encodedMessage,
@@ -55,8 +55,7 @@ func (c *Connection) baseString() (stringy string) {
 
 func (c *Connection) String() (stringy string) {
 	base := c.baseString()
-	// TODO: remove newline from returned string, callers can add it as needed.
-	stringy = fmt.Sprintf("%v %v\n", base, c.ConnectEpoch)
+	stringy = fmt.Sprintf("%v %v", base, c.ConnectEpoch)
 	return stringy
 }
 
@@ -65,7 +64,7 @@ func (c *Connection) String() (stringy string) {
 // Matches on 3-tuple of:
 // message, sender, receive time.
 func (c *Connection) Equals(other *Connection) (equal bool) {
-	equal = c.Message == other.Message && c.ConnectionId == other.ConnectionId && c.ReceiveEpoch == other.ReceiveEpoch
+	equal = c.Message == other.Message && c.Sender == other.Sender && c.ReceiveEpoch == other.ReceiveEpoch
 	return equal
 }
 
@@ -99,7 +98,7 @@ func ConnectionFromString(raw string) (connection *Connection, err error) {
 		return connection, err
 	}
 	connection = &Connection{
-		ConnectionId:           string(decoded_sender),
+		Sender:                 string(decoded_sender),
 		Message:                string(decodedMessage),
 		SubscribeToMailingList: subscribeToMailingList,
 		ReceiveEpoch:           receiveEpoch}

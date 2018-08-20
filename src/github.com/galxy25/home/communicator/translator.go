@@ -17,7 +17,7 @@ func SerializeConnection(deserialized interface{}) (serialized []byte, err error
 	if err != nil {
 		return serialized, err
 	}
-	serialized = []byte(connection.String())
+	serialized = []byte(fmt.Sprintf("%v\n", connection.String()))
 	return serialized, nil
 }
 

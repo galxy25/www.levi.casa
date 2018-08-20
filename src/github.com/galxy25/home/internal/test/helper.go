@@ -80,7 +80,7 @@ func RandomConnection() (connection *data.Connection) {
 	}
 	connection = &data.Connection{
 		Message:                RandomString(100),
-		ConnectionId:           fmt.Sprintf("%v@%v", RandomString(10), RandomString(10)),
+		Sender:                 fmt.Sprintf("%v@%v", RandomString(10), RandomString(10)),
 		SubscribeToMailingList: subscriber,
 		ConnectEpoch:           connectEpoch.Unix(),
 		ReceiveEpoch:           connectEpoch.Add(time.Second).Unix(),

@@ -42,14 +42,14 @@ let email_extract_and_reset_xip = [
         index: 0,
         accesor: 'value',
         reset_to: "''",
-        store_as: 'email_connect'
+        store_as: 'message'
     },
     {
         selector: '#email-connect-id',
         index: 0,
         accesor: 'value',
         reset_to: "''",
-        store_as: 'email_connect_id'
+        store_as: 'sender'
     },
     {
         selector: '#subscribe-to-mailing-list',
@@ -68,14 +68,14 @@ let text_extract_and_reset_xip = [
         index: 0,
         accesor: 'value',
         reset_to: "''",
-        store_as: 'text_connect'
+        store_as: 'message'
     },
     {
         selector: '#text-connect-id',
         index: 0,
         accesor: 'value',
         reset_to: "''",
-        store_as: 'text_connect_id'
+        store_as: 'sender'
     }
 ];
 // Connection input data getter and reseter

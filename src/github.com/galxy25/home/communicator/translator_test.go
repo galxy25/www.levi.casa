@@ -2,6 +2,7 @@ package communicator
 
 import (
 	"bufio"
+	"fmt"
 	"github.com/galxy25/home/data"
 	helper "github.com/galxy25/home/internal/test"
 	"os"
@@ -14,7 +15,7 @@ func TestSerializeConnectionReturnsSameConnectionAsBytes(t *testing.T) {
 	if err != nil {
 		t.Errorf("error serializing connection %v:%v\n", connection, err)
 	}
-	if string(serializedConnection) != connection.String() {
+	if string(serializedConnection) != fmt.Sprintf("%v\n", connection.String()) {
 		t.Errorf("got %v\n wanted %v\n", string(serializedConnection), connection.String())
 	}
 }
@@ -56,7 +57,7 @@ func TestWriteConnectionWritesSerializedConnectionToConnectionFile(t *testing.T)
 	if err != nil {
 		t.Error(err)
 	}
-	if string(wroteConnection) != connection.String() {
+	if string(wroteConnection) != fmt.Sprintf("%v\n", connection.String()) {
 		t.Errorf("expected %v got %v\n", connection.String(), string(wroteConnection))
 	}
 }
@@ -84,7 +85,7 @@ func TestWriteConnectionsWritesSerializedConnectionsToConnectionFile(t *testing.
 		if err != nil {
 			t.Error(err)
 		}
-		if string(wroteConnection) != connection.String() {
+		if string(wroteConnection) != fmt.Sprintf("%v\n", connection.String()) {
 			t.Errorf("expected %v got %v\n", connection.String(), string(wroteConnection))
 		}
 	}

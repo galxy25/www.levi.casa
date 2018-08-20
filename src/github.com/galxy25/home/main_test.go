@@ -225,7 +225,7 @@ func TestHomeMakesConnectionInUnderOneSecond(t *testing.T) {
 	// Construct connection to make
 	connection := data.Connection{
 		Message:                helper.RandomString(100),
-		ConnectionId:           "tester@test.com",
+		Sender:                 "tester@test.com",
 		SubscribeToMailingList: false,
 	}
 	// Send connection to home
@@ -268,13 +268,13 @@ func TestHomeReconcilesUnlinkedConnectionsOnStartup(t *testing.T) {
 	connections := []*data.Connection{
 		&data.Connection{
 			Message:                helper.RandomString(100),
-			ConnectionId:           "tester@test.com",
+			Sender:                 "tester@test.com",
 			SubscribeToMailingList: false,
 			ReceiveEpoch:           time.Now().Unix(),
 		},
 		&data.Connection{
 			Message:                helper.RandomString(100),
-			ConnectionId:           "tester@test.com",
+			Sender:                 "tester@test.com",
 			SubscribeToMailingList: true,
 			ReceiveEpoch:           time.Now().Unix(),
 		},
@@ -331,13 +331,13 @@ func TestHomeReconcileOnStartupNoOpsForLinkedConnections(t *testing.T) {
 	connections := []*data.Connection{
 		&data.Connection{
 			Message:                helper.RandomString(100),
-			ConnectionId:           "tester@test.com",
+			Sender:                 "tester@test.com",
 			SubscribeToMailingList: false,
 			ReceiveEpoch:           time.Now().Unix(),
 		},
 		&data.Connection{
 			Message:                helper.RandomString(100),
-			ConnectionId:           "tester@test.com",
+			Sender:                 "tester@test.com",
 			SubscribeToMailingList: true,
 			ReceiveEpoch:           time.Now().Unix(),
 		},
