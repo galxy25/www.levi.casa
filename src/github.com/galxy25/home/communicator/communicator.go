@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// endpoint URI for receiving connections
+// endpoint URI for proxying connections
 var snsTopicARN = os.Getenv("HOME_SNS_TOPIC")
 
 // 🙄 only a "variable" so we can stub it in tests
@@ -72,18 +72,21 @@ func (c *Communicator) Record(newConnection *data.Connection) (err error) {
 	return err
 }
 
-// ReportLinked reports all linked connections
+// Sent reports all linked connections
 // for a communicator, returning linked connections and error (if any).
 // To stop an in progress report, send on the finish channel.
-func (c *Communicator) ReportLinked(finish <-chan struct{}) (linked chan *data.Connection, err error) {
+func (c *Communicator) Sent(finish <-chan struct{}) (linked chan *data.Connection, err error) {
 	linked, err = c.currentConnections.Each(finish)
 	return linked, err
 }
 
-// ReportUnlinked reports all unlinked connections
-// for a communicator, returning unlinked connections and error (if any).
+// Received reports all received connections
+// for a communicator, returning those connections
+// and error (if any). Received connections will also appear
+// in the list of connections reported by Communicator.Sent
+// if the connection has been linked.
 // To stop an in progress report, send on the finish channel.
-func (c *Communicator) ReportUnlinked(finish <-chan struct{}) (unlinked chan *data.Connection, err error) {
+func (c *Communicator) Received(finish <-chan struct{}) (unlinked chan *data.Connection, err error) {
 	unlinked, err = c.desiredConnections.Each(finish)
 	return unlinked, err
 }
@@ -94,11 +97,11 @@ func (c *Communicator) ReportUnlinked(finish <-chan struct{}) (unlinked chan *da
 func (c *Communicator) Reconcile() (reconciled []*data.Connection, err error) {
 	stop := make(chan struct{})
 	defer close(stop)
-	desired, err := c.ReportUnlinked(stop)
+	desired, err := c.Received(stop)
 	if err != nil {
 		return reconciled, err
 	}
-	current, err := c.ReportLinked(stop)
+	current, err := c.Sent(stop)
 	if err != nil {
 		return reconciled, err
 	}

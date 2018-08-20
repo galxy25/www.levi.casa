@@ -162,7 +162,7 @@ func inbox(w http.ResponseWriter, r *http.Request) {
 	var connections data.Connections
 	stop := make(chan struct{})
 	defer close(stop)
-	currentConnections, err := comm.ReportLinked(stop)
+	currentConnections, err := comm.Sent(stop)
 	if err != nil {
 		packageLogger.WithFields(log.Fields{
 			"executor": "#inbox",
@@ -194,12 +194,12 @@ func stats(w http.ResponseWriter, r *http.Request) {
 	var unlinked, linked int64
 	stop := make(chan struct{})
 	defer close(stop)
-	desiredConnections, err := comm.ReportUnlinked(stop)
+	desiredConnections, err := comm.Received(stop)
 	if err != nil {
 		errorResponse(w, "error trying to count unlinked connections", nil, http.StatusInternalServerError)
 		return
 	}
-	currentConnections, err := comm.ReportLinked(stop)
+	currentConnections, err := comm.Sent(stop)
 	if err != nil {
 		errorResponse(w, "error trying to count linked connections", nil, http.StatusInternalServerError)
 		return

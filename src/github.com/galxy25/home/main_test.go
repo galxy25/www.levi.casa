@@ -319,7 +319,7 @@ func TestHomeReconcilesUnlinkedConnectionsOnStartup(t *testing.T) {
 	}
 	if !made {
 		var unmadeConnections []*data.Connection
-		unlinkedIterator, _ := comm.ReportUnlinked(cancel)
+		unlinkedIterator, _ := comm.Received(cancel)
 		for unlinked := range unlinkedIterator {
 			unmadeConnections = append(unmadeConnections, unlinked)
 		}
