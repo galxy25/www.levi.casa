@@ -29,7 +29,7 @@
     "private/protocol/query/queryutil",
     "private/protocol/rest",
     "private/protocol/xml/xmlutil",
-    "service/sns",
+    "service/ses",
     "service/sts"
   ]
   revision = "bfc1a07cf158c30c41a3eefba8aae043d0bb5bff"
@@ -70,6 +70,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "ab08a5e19f03a76b58d228f471f634b456d2d048a8e574c1aff36f79330aa3d3"
+  inputs-digest = "6c067c4e81af49258298ef2115aedeaecd310b35625862c947d604bec728f5c3"
   solver-name = "gps-cdcl"
   solver-version = 1

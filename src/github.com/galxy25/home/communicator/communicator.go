@@ -2,30 +2,15 @@
 package communicator
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/sns"
+	"fmt"
 	"github.com/galxy25/home/data"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"time"
 )
 
-// endpoint URI for proxying connections
-var snsTopicARN = os.Getenv("HOME_SNS_TOPIC")
-
-// 🙄 only a "variable" so we can stub it in tests
-var snsPublisher = func(message string) (resp interface{}, err error) {
-	sess := session.Must(session.NewSession())
-	svc := sns.New(sess)
-	params := &sns.PublishInput{
-		Message:  aws.String(message),
-		TopicArn: aws.String(snsTopicARN),
-		Subject:  aws.String("Message to www.levi.casa"),
-	}
-	resp, err = svc.Publish(params)
-	return resp, err
-}
+// Address for receiving email communications.
+var homeEmail = os.Getenv("HOME_EMAIL")
 
 // Configure package logging context
 var packageLogger = log.WithFields(log.Fields{
@@ -42,12 +27,20 @@ type Communicator struct {
 // Link attempts to make a connection,
 // returning made connection and error (if any).
 func (c *Communicator) Link(newConnection *data.Connection) (madeConnection *data.Connection, err error) {
-	message := newConnection.Message
-	resp, err := snsPublisher(message)
+	// XXX: only email's for the moment
+	// coming soon: SMS, Slack, SnapChat
+	// FB messenger, twitter, ...
+	email := &Email{
+		Message:   newConnection.Message,
+		Sender:    newConnection.Sender,
+		Receivers: []string{homeEmail},
+		Subject:   fmt.Sprintf("%v -> www.levi.casa", newConnection.Sender),
+	}
+	err = email.Send()
 	if err != nil {
 		packageLogger.WithFields(log.Fields{
-			"executor":           "#Link.#snsPublisher",
-			"command_parameters": message,
+			"executor":           "#Link.Email.#Send",
+			"command_parameters": email,
 			"error":              err.Error(),
 			"connection":         newConnection,
 		}).Error("error making connection")
@@ -57,10 +50,9 @@ func (c *Communicator) Link(newConnection *data.Connection) (madeConnection *dat
 	connectEpoch := connectedTimestamp.Unix()
 	newConnection.ConnectEpoch = connectEpoch
 	packageLogger.WithFields(log.Fields{
-		"executor":         "#Link",
-		"connection":       newConnection,
-		"publish_response": resp,
-	}).Info("Successfully made connection")
+		"executor":   "#Link",
+		"connection": newConnection,
+	}).Info("successfully linked connection")
 	err = c.currentConnections.WriteConnection(newConnection)
 	return newConnection, err
 }

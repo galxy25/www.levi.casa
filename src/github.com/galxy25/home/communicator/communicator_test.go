@@ -1,21 +1,22 @@
 package communicator
 
 import (
+	"github.com/aws/aws-sdk-go/service/ses"
 	"github.com/galxy25/home/data"
 	helper "github.com/galxy25/home/internal/test"
 	"os"
 	"testing"
 )
 
-var realSnsPublisher = snsPublisher
-var mockSnsPublisher = func(message string) (resp interface{}, err error) {
-	return resp, err
+var realSesPublisher = sesPublisher
+var mockSesPublisher = func(email *Email) (response *ses.SendEmailOutput, err error) {
+	return response, err
 }
 
 func TestSuccesfulLinkRecordsLinkedConnection(t *testing.T) {
-	snsPublisher = mockSnsPublisher
+	sesPublisher = mockSesPublisher
 	defer func() {
-		snsPublisher = realSnsPublisher
+		sesPublisher = realSesPublisher
 	}()
 	desired, current := "TestSuccesfulLinkRecordsLinkedConnection.desired", "TestSuccesfulLinkRecordsLinkedConnection.current"
 	defer os.Remove(desired)
@@ -101,9 +102,9 @@ func TestReceivedReportsAllUnlinkedConnections(t *testing.T) {
 }
 
 func TestSentReportsAllLinkedConnections(t *testing.T) {
-	snsPublisher = mockSnsPublisher
+	sesPublisher = mockSesPublisher
 	defer func() {
-		snsPublisher = realSnsPublisher
+		sesPublisher = realSesPublisher
 	}()
 	desired, current := "TestSentReportsAllLinkedConnections.desired", "TestSentReportsAllLinkedConnections.current"
 	defer os.Remove(desired)
@@ -149,9 +150,9 @@ func TestSentReportsAllLinkedConnections(t *testing.T) {
 }
 
 func TestReconcileLinksAllUnlinkedConnections(t *testing.T) {
-	snsPublisher = mockSnsPublisher
+	sesPublisher = mockSesPublisher
 	defer func() {
-		snsPublisher = realSnsPublisher
+		sesPublisher = realSesPublisher
 	}()
 	desired, current := "TestReconcileLinksAllUnlinkedConnections.desired", "TestReconcileLinksAllUnlinkedConnections.current"
 	defer os.Remove(desired)

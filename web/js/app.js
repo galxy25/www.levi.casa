@@ -19,7 +19,7 @@ function update_displayed_date(){
 }
 // For local development/avoiding infinite routing loops
 if (window.location.hostname === "localhost") {
-    $("#desk-cam")[0].src = "http://10.0.0.139:8080";
+    $("#what-am-I-doing")[0].href = "http://10.0.0.139:8080";
 }
 
 // REACT

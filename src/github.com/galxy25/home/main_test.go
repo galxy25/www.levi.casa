@@ -368,3 +368,48 @@ func TestHomeReconcileOnStartupNoOpsForLinkedConnections(t *testing.T) {
 		t.Errorf("expected same number of linked and unlinked connections, got %v\n", metrics)
 	}
 }
+
+func TestHomeMakesConnectionWhenSenderIsNotReplyable(t *testing.T) {
+	test_house := HomeTestProcess{test_context: t}
+	house_under_test, _ := helper.ExecuteTestProcess(&test_house)
+	defer house_under_test.Terminate()
+	// Construct connection to make
+	connection := data.Connection{
+		Message:                helper.RandomString(100),
+		Sender:                 "not a valid email address",
+		SubscribeToMailingList: false,
+	}
+	// Send connection to home
+	resp, err := house_under_test.Call("CONNECT", connection)
+	if err != nil {
+		t.Fatalf("%v\nFailed to initiate connection %v\n%v\n", err, connection, resp)
+	}
+	var persisted_connection data.Connection
+	err = json.Unmarshal([]byte(castToResponse(resp).Json), &persisted_connection)
+	if err != nil {
+		t.Errorf("connect endpoint responded with invalid connection response: %v\n%v\n", resp, err)
+	}
+	// Verify test connection registered
+	match := false
+	tries := 10
+	// Get the current list of connections
+	var connections data.Connections
+	for tries > 0 && !match {
+		resp, err = house_under_test.Call("INBOX", nil)
+		err = json.Unmarshal([]byte(castToResponse(resp).Json), &connections)
+		for _, connected := range connections.Connections {
+			if connected.Equals(&persisted_connection) {
+				match = true
+				break
+			}
+		}
+		if match {
+			break
+		}
+		tries--
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !match {
+		t.Fatalf("Test connection %v \n not present in list of connections %v ", persisted_connection, connections)
+	}
+}

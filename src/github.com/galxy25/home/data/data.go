@@ -13,7 +13,7 @@ import (
 )
 
 // default anonymous user token, c.g a token's antonym
-const anonToker = "antonym"
+const AnonToker = "antonym"
 
 // default user connections are sent to and from
 var toker = os.Getenv("TOKER")
@@ -42,7 +42,7 @@ type Connections struct {
 func (c *Connection) baseString() (stringy string) {
 	encodedMessage := hex.EncodeToString([]byte(c.Message))
 	if c.Sender == "" {
-		c.Sender = fmt.Sprintf("%v:%v", anonToker, toker)
+		c.Sender = fmt.Sprintf("%v:%v", AnonToker, toker)
 	}
 	encodedConnectId := hex.EncodeToString([]byte(c.Sender))
 	stringy = fmt.Sprintf("%v:%v %v %t %v", encodedConnectId,
