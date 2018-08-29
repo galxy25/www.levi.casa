@@ -8,7 +8,7 @@ type Each struct {
 }
 
 // ForEach functions
-// lazily return all values of a collection
+// lazily return all values of a collection,
 // iteration stopper, and iteration error(s)(if any)
 // to cancel iteration send on the cancel channel.
 // Trying a more functional golang approach: Make it so!

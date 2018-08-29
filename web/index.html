@@ -3,39 +3,28 @@
     <!-- Begin Image2Icon auto generated links -->
     <!-- For old IEs -->
     <link rel="shortcut icon" href="images/favicon/favicon.ico" />
-
     <!-- For new browsers - multisize ico  -->
     <link rel="icon" type="image/x-icon" sizes="16x16 32x32" href="images/favicon/favicon.ico">
-
     <!-- For iPad with high-resolution Retina display running iOS ≥ 7: -->
     <link rel="apple-touch-icon" sizes="152x152" href="images/favicon/favicon-152-precomposed.png">
-
     <!-- For iPad with high-resolution Retina display running iOS ≤ 6: -->
     <link rel="apple-touch-icon" sizes="144x144" href="images/favicon/favicon-144-precomposed.png">
-
     <!-- For iPhone with high-resolution Retina display running iOS ≥ 7: -->
     <link rel="apple-touch-icon" sizes="120x120" href="images/favicon/favicon-120-precomposed.png">
-
     <!-- For iPhone with high-resolution Retina display running iOS ≤ 6: -->
     <link rel="apple-touch-icon" sizes="114x114" href="images/favicon/favicon-114-precomposed.png">
-
     <!-- For iPhone 6+ -->
     <link rel="apple-touch-icon" sizes="180x180" href="images/favicon/favicon-180-precomposed.png">
-
     <!-- For first- and second-generation iPad: -->
     <link rel="apple-touch-icon" sizes="72x72" href="images/favicon/favicon-72-precomposed.png">
-
     <!-- For non-Retina iPhone, iPod Touch, and Android 2.1+ devices: -->
     <link rel="apple-touch-icon" href="images/favicon/favicon-57.png">
-
     <!-- For Old Chrome -->
     <link rel="icon" href="images/favicon/favicon-32.png" sizes="32x32">
-
     <!-- For IE10 Metro -->
     <meta name="msapplication-TileColor" content="#FFFFFF">
     <meta name="msapplication-TileImage" content="favicon-144.png">
     <meta name="theme-color" content="#ffffff">
-
     <!-- Chrome for Android -->
     <link rel="manifest" href="images/favicon/manifest.json">
     <link rel="icon" sizes="192x192" href="images/favicon/favicon-192.png">
@@ -114,63 +103,51 @@
     <!-- Begin unseen footer -->
     <!-- Begin Portal Modals -->
     <!-- Begin Connect portal modal -->
-    <div id="do-connect" class="reveal large" data-reveal data-animation-in="scale-in-up fast" data-animation-out="fade-out fast">
-      <!-- Begin Connect over email section -->
+    <div id="do-connect" class="reveal medium" data-reveal data-animation-in="scale-in-up fast" data-animation-out="fade-out fast">
+    <!-- Begin Connect sender id input -->
       <form>
-        <div class="grid-container">
-          <div class="grid-x grid-padding-x">
-            <div class="large-8 cell" >
-              <label>Send me a private, secure, and  encrypted e-mail
-                <textarea placeholder="👋, ✍️. -👋" id="email-connect"></textarea>
+          <div class="grid-container grid-x">
+            <div class="small-5 cell">
+              <label>Connect via Email:
+                <input type="email" placeholder="from@you.com" id="email-connect-id">
               </label>
             </div>
-            <div class="large-3 cell">
-              <label>Share your email address with me
-                <input type="email" placeholder="do@you.com" id="email-connect-id">
+            <div class="small-2 cell">
+              <p id="connect-or">OR</p>
+            </div>
+            <div class="small-5 cell">
+              <label>Connect via SMS:
+                <input type="tel" placeholder="+15038675309" id="text-connect-id">
               </label>
-              <div class="mailing-list-check-box">
-                <input id="subscribe-to-mailing-list" type="checkbox">
-                <label for="subscribe-to-mailing-list">Add me to the mailing list</label>
-              </div>
             </div>
-            <div class="large-1 cell">
-              <button type="button" aria-label="Send email input" class="success button do-connect-button" id="do-email-connect">
-                Send
-              </button>
-            </div>
+          </div>
+      </form>
+    <!-- End Connect sender id input -->
+    <!-- Begin Connect input -->
+      <form>
+        <div class="grid-container grid-x">
+          <div class="small-12 cell" >
+            <label>Send me a <span data-tooltip tabindex="1" title="1 (you) to 1 (me)">private</span>, and <span data-tooltip tabindex="1" title="end to end encrypted">secure</span> message:
+              <textarea placeholder="👋, ✍️. -✌️" id="connect-message"></textarea>
+            </label>
           </div>
         </div>
       </form>
-      <!-- End Connect over email section -->
-      <!-- Begin Connect over SMS section -->
-      <form>
-        <div class="grid-container">
-          <div class="grid-x grid-padding-x">
-            <div class="large-8 cell" >
-              <label>Send me a private, secure, and  encrypted SMS
-                <textarea placeholder="😳🤣😘" id="text-connect"></textarea>
-              </label>
-            </div>
-            <div class="large-3 cell">
-              <label>Share your phone number with me
-                <input type="tel" placeholder="503-771-4282" id="text-connect-id">
-              </label>
-            </div>
-            <div class="large-1 cell">
-              <button type="button" aria-label="Send text input" class="success button do-connect-button" id="do-text-connect">
-                Send
-              </button>
-            </div>
-          </div>
+    <!-- End Connect input -->
+    <!-- Begin Connect buttons -->
+      <div class="grid-container grid-x">
+        <div class="small-10 cell left do-connect-close-button">
+          <button type="button" data-toggle aria-label="Close modal" class="alert button">
+            Close
+          </button>
         </div>
-      </form>
-      <!-- End Connect over SMS section -->
-      <div class="do-connect-close-button">
-        <button type="button" data-toggle aria-label="Close modal" class="alert button">
-          Close
-        </button>
+        <div class="small-2 cell right do-connect-button">
+          <button type="button" aria-label="Send message" class="success button" id="do-connect">
+            Send
+          </button>
+        </div>
       </div>
-    </div>
+    <!-- End Connect buttons -->
     <!-- End Connect portal modal -->
     <div id="do-share" class="reveal" data-reveal>
         <img src="https://news.bbcimg.co.uk/media/images/65904000/jpg/_65904720_mdis_global_enhancedcolor_caloris_orth_hd.jpg"/>
@@ -178,7 +155,6 @@
           <span aria-hidden="true">&times;</span>
         </button>
     </div>
-
     <div id="do-tell" data-reveal class="reveal">
         <img src="https://upload.wikimedia.org/wikipedia/commons/1/10/Kepler10b_artist.jpg"/>
         <button class="close-button" data-close aria-label="Close modal" type="button">
@@ -186,7 +162,6 @@
         </button>
     </div>
     <!-- End Portal Modals -->
-
     <!-- Begin scripts -->
     <script src="js/vendor/jquery.js"></script>
     <script src="js/vendor/what-input.js"></script>

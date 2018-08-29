@@ -26,10 +26,15 @@ var desiredConnectionsFilePath = os.Getenv("DESIRED_CONNECTIONS_FILEPATH")
 var currentConnectionsFilePath = os.Getenv("CURRENT_CONNECTIONS_FILEPATH")
 
 // Port that web server should listen on
-var homePort, _ = strconv.Atoi(os.Getenv("CASA_PORT"))
+var homePort, _ = strconv.Atoi(os.Getenv("HOME_PORT"))
 
-// Communicator used to receive and send
-// connections
+// Address for receiving email communications.
+var homeEmail = os.Getenv("HOME_EMAIL")
+
+// Phone number for personal telephonic communications.
+var homePhone = os.Getenv("HOME_PHONE_NUMBER")
+
+// Universal communicator for receiving and sending connections
 var comm = communicator.NewCommunicator(desiredConnectionsFilePath, currentConnectionsFilePath)
 
 // Package logging context
@@ -53,8 +58,11 @@ var Endpoints = map[string]Endpoint{
 	"HEALTH": Endpoint{
 		Path: "/ping",
 		Verb: "GET"},
-	"CONNECT": Endpoint{
-		Path: "/connect",
+	"NEWEMAIL": Endpoint{
+		Path: "/email",
+		Verb: "POST"},
+	"NEWSMS": Endpoint{
+		Path: "/sms",
 		Verb: "POST"},
 	"INBOX": Endpoint{
 		Path: "/inbox",
@@ -97,64 +105,89 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// connect handles a clients request to connect.
+// connect handles clients connection requests
 func connect(w http.ResponseWriter, r *http.Request) {
-	connectTimestamp := time.Now()
-	connectEpoch := connectTimestamp.Unix()
-	var connection *data.Connection
-	err := json.NewDecoder(r.Body).Decode(&connection)
-	if err != nil {
-		response := &Response{
-			Message:    "Invalid connection sent",
-			StatusCode: http.StatusBadRequest}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-	if len(connection.Message) == 0 {
-		errorResponse(w, "Connection must have message content", nil, http.StatusBadRequest)
-		return
-	}
-	connection.ReceiveEpoch = connectEpoch
-	err = comm.Record(connection)
-	if err != nil {
-		packageLogger.WithFields(log.Fields{
-			"executor":   "#connect#Communicator.#Record",
-			"connection": connection,
-			"error":      err,
-		}).Error("failed to record new connection")
-		response := &Response{
-			Message:    "Error processing connection",
-			StatusCode: http.StatusInternalServerError}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(response)
-	}
-	go func() {
-		// TODO: keep count of number of in flight connections
-		connected, err := comm.Link(connection)
-		// TODO: record link latency
+	switch r.Method {
+	case "POST":
+		connectTimestamp := time.Now()
+		connectEpoch := connectTimestamp.Unix()
+		var connection *data.Connection
+		err := json.NewDecoder(r.Body).Decode(&connection)
+		if err != nil {
+			response := &Response{
+				Message:    "Invalid connection sent",
+				StatusCode: http.StatusBadRequest}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		var sender communicator.Sender
+		switch r.URL.RequestURI() {
+		case "/email":
+			connection.Receiver = homeEmail
+			sender, err = communicator.EmailFromConnection(connection)
+			if err != nil {
+				errorResponse(w, err.Error(), err, http.StatusBadRequest)
+				return
+			}
+		case "/sms":
+			connection.Receiver = homePhone
+			sender, err = communicator.SmsFromConnection(connection)
+			if err != nil {
+				errorResponse(w, err.Error(), err, http.StatusBadRequest)
+				return
+			}
+		default:
+			w.WriteHeader(http.StatusMisdirectedRequest)
+			return
+		}
+		connection.SendEpoch = connectEpoch
+		err = comm.Record(connection)
 		if err != nil {
 			packageLogger.WithFields(log.Fields{
-				"executor":   "#Communicator.#Link",
+				"executor":   "#connect#Communicator.#Record",
 				"connection": connection,
 				"error":      err,
-			}).Error("failed to link new connection")
+			}).Error("failed to record new connection")
+			response := &Response{
+				Message:    "Error processing connection",
+				StatusCode: http.StatusInternalServerError}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(response)
+			return
 		}
-		packageLogger.WithFields(log.Fields{
-			"executor":   "#Communicator.#Link",
-			"connection": connected,
-		}).Info("linked connection")
-	}()
-	response := &Response{
-		Message:    "Connection initiated",
-		StatusCode: http.StatusAccepted}
-	responseBytes, _ := json.Marshal(connection)
-	response.Json = string(responseBytes)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(response)
+		go func() {
+			// TODO: keep count of number of in flight connections
+			connected, err := comm.Link(connection, sender)
+			// TODO: record link latency
+			if err != nil {
+				packageLogger.WithFields(log.Fields{
+					"executor":    "#Communicator.#Link",
+					"connection":  connection,
+					"error":       err,
+					"sender_type": fmt.Sprintf("%T", sender),
+				}).Error("failed to link new connection")
+			} else {
+				packageLogger.WithFields(log.Fields{
+					"executor":    "#Communicator.#Link",
+					"connection":  connected,
+					"sender_type": fmt.Sprintf("%T", sender),
+				}).Info("linked connection")
+			}
+		}()
+		response := &Response{
+			Message:    "Connection initiated",
+			StatusCode: http.StatusAccepted}
+		responseBytes, _ := json.Marshal(connection)
+		response.Json = string(responseBytes)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(response)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
 
 // inbox returns the list of current connections.
@@ -262,14 +295,16 @@ func errorResponse(w http.ResponseWriter, msg string, err error, statusCode int)
 // TODO: extract communicator service into separate cmd/binary & docker images
 func main() {
 	httpd := http.NewServeMux()
-	// Serve web files in the static directory
+	// Serve website based off files in the web directory
 	httpd.Handle(Endpoints["BASE"].Path, http.FileServer(http.Dir("./web")))
 	// Expose an endpoint for health check requests
 	httpd.HandleFunc(Endpoints["HEALTH"].Path, ping)
 	// Expose an endpoint for process metric requests
 	httpd.HandleFunc(Endpoints["METRICS"].Path, stats)
-	// Expose an endpoint for connect requests
-	httpd.HandleFunc(Endpoints["CONNECT"].Path, connect)
+	// Expose an endpoint for new email requests
+	httpd.HandleFunc(Endpoints["NEWEMAIL"].Path, connect)
+	// Expose an endpoint for new sms requests
+	httpd.HandleFunc(Endpoints["NEWSMS"].Path, connect)
 	// Expose an endpoint for inbox requests
 	httpd.HandleFunc(Endpoints["INBOX"].Path, inbox)
 	// If there are any unconnected connections

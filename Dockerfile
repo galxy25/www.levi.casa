@@ -2,10 +2,10 @@
 From golang:alpine
 # Install curl so we can use it for health checking
 # containers of this image
-RUN apk add --no-cache curl
 # Install make for running build commands
 # Probably a bit of an overkill versus sh'ing things
-RUN apk add --update make
+# Install gcc so we can compile go inside the container
+RUN apk add --no-cache curl make gcc g++
 # Copy the server src files to the containers go directory
 ADD ./src /go/src/
 # Copy the client files to the containers web server directory

@@ -5,7 +5,7 @@ ROOT_PACKAGE=github.com/galxy25/home
 GOPATH=$(PWD)
 export GOPATH=$(PWD)
 
-.PHONY: install build clean lint test all start run stop restart rere docker_build docker_run docker_tag docker_push docker_pull docker_serve docker_clean
+.PHONY: install build clean lint test all start run stop restart rere docker_build docker_run docker_tag docker_push docker_pull docker_clean
 
 lint :
 	echo "Linting"
@@ -66,7 +66,7 @@ docker_build :
 
 docker_run :
 	echo "Running docker image casa:latest"
-	docker run -d -p $$CASA_PORT:$$CASA_PORT/tcp --mount type=bind,source="$$(pwd)/data",target=/go/data --env-file Envfile -e AWS_DEFAULT_REGION=$$AWS_DEFAULT_REGION -e AWS_ACCESS_KEY_ID=$$AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$$AWS_SECRET_ACCESS_KEY casa:latest
+	docker run -d -p $$HOME_PORT:$$HOME_PORT/tcp --mount type=bind,source="$$(pwd)/data",target=/go/data --env-file Envfile -e AWS_DEFAULT_REGION=$$AWS_DEFAULT_REGION -e AWS_ACCESS_KEY_ID=$$AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$$AWS_SECRET_ACCESS_KEY casa:latest
 
 docker_stop :
 	echo "Stopping all containers listening on TCP socket 8081"
@@ -89,9 +89,6 @@ docker_pull :
 docker_clean :
 	docker rmi -f $$(docker images -qf dangling=true) & \
 	docker volume rm $$(docker volume ls -qf dangling=true)
-
-docker_serve :
-	docker run -d -p $$CASA_PORT:$$CASA_PORT/tcp -v "$$(pwd)/data":/data --env-file Envfile galxy25/www.levi.casa:latest
 
 clean :
 	echo "Cleaning"

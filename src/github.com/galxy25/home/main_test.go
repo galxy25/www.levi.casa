@@ -21,6 +21,12 @@ import (
 	"time"
 )
 
+// Mapping from endpoint lookup key to connection type
+var newConnectionEndpoints = map[string]string{
+	"email": "NEWEMAIL",
+	"sms":   "NEWSMS",
+}
+
 // Path to test executables dir for use by the test run
 var projectRoot = flag.String("project_root", "", "App root directory for the package under test")
 
@@ -154,6 +160,8 @@ func (l *HomeTestProcess) Call(method string, body interface{}) (response interf
 	return response, err
 }
 
+// client wraps an http client for making calls
+// to www.levi.casa servers.
 func (l *HomeTestProcess) client(endpoint Endpoint, body interface{}) (response Response, err error) {
 	call_path := l.endpoint_uri(endpoint)
 	switch endpoint.Verb {
@@ -218,67 +226,59 @@ func TestItRunsAndStops(t *testing.T) {
 
 // E2E integration test
 // connection -> home => connected
-func TestHomeMakesConnectionInUnderOneSecond(t *testing.T) {
+func TestHomeMakesConnectionsInUnderOneSecond(t *testing.T) {
 	test_house := HomeTestProcess{test_context: t}
 	house_under_test, _ := helper.ExecuteTestProcess(&test_house)
 	defer house_under_test.Terminate()
-	// Construct connection to make
-	connection := data.Connection{
-		Message:                helper.RandomString(100),
-		Sender:                 "tester@test.com",
-		SubscribeToMailingList: false,
-	}
-	// Send connection to home
-	resp, err := house_under_test.Call("CONNECT", connection)
-	if err != nil {
-		t.Fatalf("%v\nFailed to initiate connection %v\n%v\n", err, connection, resp)
-	}
-	var persisted_connection data.Connection
-	err = json.Unmarshal([]byte(castToResponse(resp).Json), &persisted_connection)
-	if err != nil {
-		t.Errorf("connect endpoint responded with invalid connection response: %v\n%v\n", resp, err)
-	}
-	// Verify test connection registered
-	match := false
-	tries := 10
-	// Get the current list of connections
-	var connections data.Connections
-	for tries > 0 && !match {
-		resp, err = house_under_test.Call("INBOX", nil)
-		err = json.Unmarshal([]byte(castToResponse(resp).Json), &connections)
-		for _, connected := range connections.Connections {
-			if connected.Equals(&persisted_connection) {
-				match = true
+	for connectionType, endpoint := range newConnectionEndpoints {
+		// Construct connection to make
+		connection := helper.ConnectionGenerators[connectionType]()
+		// Send connection to home
+		resp, err := house_under_test.Call(endpoint, connection)
+		if err != nil {
+			t.Errorf("%v\nFailed to initiate connection %v\n%v\n", err, connection, resp)
+		}
+		var persisted_connection data.Connection
+		err = json.Unmarshal([]byte(castToResponse(resp).Json), &persisted_connection)
+		if err != nil {
+			t.Errorf("connect endpoint responded with invalid connection response: %v\n%v\n", resp, err)
+		}
+		// Verify test connection registered
+		match := false
+		tries := 20
+		// Get the current list of connections
+		var connections data.Connections
+		for tries > 0 && !match {
+			resp, err = house_under_test.Call("INBOX", nil)
+			err = json.Unmarshal([]byte(castToResponse(resp).Json), &connections)
+			for _, connected := range connections.Connections {
+				if connected.Equals(&persisted_connection) {
+					match = true
+					break
+				}
+			}
+			if match {
 				break
 			}
+			tries--
+			time.Sleep(100 * time.Millisecond)
 		}
-		if match {
-			break
+		if !match {
+			t.Errorf("Test connection %v \n not present in list of connections %v ", persisted_connection, connections)
 		}
-		tries--
-		time.Sleep(100 * time.Millisecond)
-	}
-	if !match {
-		t.Fatalf("Test connection %v \n not present in list of connections %v ", persisted_connection, connections)
 	}
 }
 
 // Test on restart unmade connections get made
 func TestHomeReconcilesUnlinkedConnectionsOnStartup(t *testing.T) {
 	connections := []*data.Connection{
-		&data.Connection{
-			Message:                helper.RandomString(100),
-			Sender:                 "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           time.Now().Unix(),
-		},
-		&data.Connection{
-			Message:                helper.RandomString(100),
-			Sender:                 "tester@test.com",
-			SubscribeToMailingList: true,
-			ReceiveEpoch:           time.Now().Unix(),
-		},
+		helper.RandomEmailConnection(),
+		helper.RandomSmsConnection(),
 	}
+	// messaging services frugally frown
+	// on sending undeliverable messages
+	connections[0].Receiver = homeEmail
+	connections[1].Receiver = homePhone
 	desiredConnectionsFile := communicator.NewConnectionFile(fmt.Sprintf("%v/%v", *projectRoot, desiredConnectionsFilePath))
 	err := desiredConnectionsFile.WriteConnections(connections)
 	if err != nil {
@@ -329,18 +329,8 @@ func TestHomeReconcilesUnlinkedConnectionsOnStartup(t *testing.T) {
 
 func TestHomeReconcileOnStartupNoOpsForLinkedConnections(t *testing.T) {
 	connections := []*data.Connection{
-		&data.Connection{
-			Message:                helper.RandomString(100),
-			Sender:                 "tester@test.com",
-			SubscribeToMailingList: false,
-			ReceiveEpoch:           time.Now().Unix(),
-		},
-		&data.Connection{
-			Message:                helper.RandomString(100),
-			Sender:                 "tester@test.com",
-			SubscribeToMailingList: true,
-			ReceiveEpoch:           time.Now().Unix(),
-		},
+		helper.RandomEmailConnection(),
+		helper.RandomEmailConnection(),
 	}
 	desiredConnectionsFile := communicator.NewConnectionFile(fmt.Sprintf("%v/%v", *projectRoot, desiredConnectionsFilePath))
 	err := desiredConnectionsFile.WriteConnections(connections)
@@ -374,13 +364,11 @@ func TestHomeMakesConnectionWhenSenderIsNotReplyable(t *testing.T) {
 	house_under_test, _ := helper.ExecuteTestProcess(&test_house)
 	defer house_under_test.Terminate()
 	// Construct connection to make
-	connection := data.Connection{
-		Message:                helper.RandomString(100),
-		Sender:                 "not a valid email address",
-		SubscribeToMailingList: false,
-	}
+	connection := helper.RandomEmailConnection()
+	connection.Sender = "not a valid email address"
+	connection.Receiver = homeEmail
 	// Send connection to home
-	resp, err := house_under_test.Call("CONNECT", connection)
+	resp, err := house_under_test.Call("NEWEMAIL", connection)
 	if err != nil {
 		t.Fatalf("%v\nFailed to initiate connection %v\n%v\n", err, connection, resp)
 	}

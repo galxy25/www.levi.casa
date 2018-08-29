@@ -5,8 +5,8 @@ Levi Schoen's digital home, consisting of front end assets(html, css, js) and ba
 # Runtime requirements
 
 * If you want to run code as a bare binary:
-    * Linux/unix/macOS
-    * Golang 1.10+
+    * Linux/macOS
+    * Golang 1.11+
 * If you want to run code as a docker image
     * docker
 
@@ -43,6 +43,8 @@ are set in the shell from which tests are run:
 * AWS_DEFAULT_REGION
 * AWS_ACCESS_KEY_ID
 * AWS_SECRET_ACCESS_KEY
+* TWILIO_ACCOUNT_SID
+* TWILIO_AUTH_TOKEN
 
 ## Lint
 
@@ -132,21 +134,19 @@ To deploy tagged docker image v2 on an environment where docker image v2 is runn
 $> ./deploy.sh v2 v1
 ```
 
-To force a deployment of v2 even if v1 is not running
+To force a deployment of v2 even if v1 is not running:
 
 ```
 $> ./deploy.sh v2 v1 force
 ```
 
-Envfile must have valid values for
+Envfile must have valid values for:
 
 * AWS_DEFAULT_REGION
 * AWS_ACCESS_KEY_ID
 * AWS_SECRET_ACCESS_KEY
+* TWILIO_ACCOUNT_SID
+* TWILIO_AUTH_TOKEN
 
 along with valid/the same values as located in this repo's Envfile
-for deployed app to be functional
-
-```
-$> ./deploy.sh v2 v1
-```
+for deployed app to be functional.

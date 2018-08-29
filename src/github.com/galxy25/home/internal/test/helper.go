@@ -54,36 +54,59 @@ func (t *TestProcess) Terminate() (err error) {
 	return t.Stop()
 }
 
-const characterSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+const alphaNumeralSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+const numberSet = "0123456789"
 
 // RandomString returns a random string of
-// length length from characterSet.
+// length length from randomSet.
 // https://www.calhoun.io/6-tips-for-using-strings-in-go/
-func RandomString(length int) string {
+func RandomString(length int, randomSet string) string {
+	if randomSet == "" {
+		randomSet = alphaNumeralSet
+	}
 	source := rand.NewSource(time.Now().UnixNano())
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = characterSet[source.Int63()%int64(len(characterSet))]
+		b[i] = randomSet[source.Int63()%int64(len(randomSet))]
 	}
 	return string(b)
 }
 
-// RandomConnection returns a pointer to a
-// randomly generated valid Connection.
-func RandomConnection() (connection *data.Connection) {
+// RandomEmailConnection returns a valid and
+// randomly generated email connection.
+func RandomEmailConnection() (connection *data.Connection) {
 	connectEpoch := time.Now()
-	var subscriber bool
-	if (connectEpoch.Unix() % 2) == 0 {
-		subscriber = true
-	} else {
-		subscriber = false
-	}
 	connection = &data.Connection{
-		Message:                RandomString(100),
-		Sender:                 fmt.Sprintf("%v@%v", RandomString(10), RandomString(10)),
-		SubscribeToMailingList: subscriber,
-		ConnectEpoch:           connectEpoch.Unix(),
-		ReceiveEpoch:           connectEpoch.Add(time.Second).Unix(),
+		Message:      RandomString(100, alphaNumeralSet),
+		Sender:       fmt.Sprintf("%v@%v.com", RandomString(10, alphaNumeralSet), RandomString(10, alphaNumeralSet)),
+		Receiver:     fmt.Sprintf("%v@%v.com", RandomString(10, alphaNumeralSet), RandomString(10, alphaNumeralSet)),
+		SendEpoch:    connectEpoch.Unix(),
+		ReceiveEpoch: connectEpoch.Add(time.Second).Unix(),
 	}
 	return connection
+}
+
+// RandomSmsConnection returns a valid and
+// randomly generated sms connection.
+func RandomSmsConnection() (connection *data.Connection) {
+	connectEpoch := time.Now()
+	connection = &data.Connection{
+		Message:      RandomString(100, alphaNumeralSet),
+		Sender:       fmt.Sprintf("+%v", RandomString(11, numberSet)),
+		Receiver:     fmt.Sprintf("+%v", RandomString(11, numberSet)),
+		SendEpoch:    connectEpoch.Unix(),
+		ReceiveEpoch: connectEpoch.Add(time.Second).Unix(),
+	}
+	return connection
+}
+
+// ConnectionGenerator is a type of function that
+// generates a connection.
+type ConnectionGenerator func() *data.Connection
+
+// ConnectionGenerators maps a connection type to a ConnectionGenerator for the given type
+var ConnectionGenerators = map[string]ConnectionGenerator{
+	"email": RandomEmailConnection,
+	"sms":   RandomSmsConnection,
 }

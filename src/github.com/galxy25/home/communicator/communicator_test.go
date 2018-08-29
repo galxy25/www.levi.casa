@@ -12,28 +12,50 @@ var realSesPublisher = sesPublisher
 var mockSesPublisher = func(email *Email) (response *ses.SendEmailOutput, err error) {
 	return response, err
 }
+var realSmsPublisher = smsPublisher
+var mockSmsPublisher = func(sms *SMS) (err error) {
+	return err
+}
 
 func TestSuccesfulLinkRecordsLinkedConnection(t *testing.T) {
 	sesPublisher = mockSesPublisher
+	smsPublisher = mockSmsPublisher
 	defer func() {
 		sesPublisher = realSesPublisher
+		smsPublisher = realSmsPublisher
 	}()
 	desired, current := "TestSuccesfulLinkRecordsLinkedConnection.desired", "TestSuccesfulLinkRecordsLinkedConnection.current"
 	defer os.Remove(desired)
 	defer os.Remove(current)
 	comm := NewCommunicator(desired, current)
-	connection := helper.RandomConnection()
-	linked, err := comm.Link(connection)
-	if err != nil {
-		t.Error(err)
-	}
-	currentConnectionFile := NewConnectionFile(current)
-	found, err := currentConnectionFile.FindConnection(linked)
-	if err != nil {
-		t.Error(err)
-	}
-	if !found {
-		t.Errorf("failed to record linked connection %v", linked)
+	var sender Sender
+	var err error
+	for connectionType, connectionGenerator := range helper.ConnectionGenerators {
+		connection := connectionGenerator()
+		switch connectionType {
+		case "email":
+			sender, err = EmailFromConnection(connection)
+			if err != nil {
+				t.Error(err)
+			}
+		case "sms":
+			sender, err = SmsFromConnection(connection)
+			if err != nil {
+				t.Error(err)
+			}
+		}
+		linked, err := comm.Link(connection, sender)
+		if err != nil {
+			t.Error(err)
+		}
+		currentConnectionFile := NewConnectionFile(current)
+		found, err := currentConnectionFile.FindConnection(linked)
+		if err != nil {
+			t.Error(err)
+		}
+		if !found {
+			t.Errorf("failed to record linked connection %v", linked)
+		}
 	}
 }
 
@@ -42,18 +64,20 @@ func TestRecordRecordsConnection(t *testing.T) {
 	defer os.Remove(desired)
 	defer os.Remove(current)
 	comm := NewCommunicator(desired, current)
-	connection := helper.RandomConnection()
-	err := comm.Record(connection)
-	if err != nil {
-		t.Error(err)
-	}
-	currentConnectionFile := NewConnectionFile(desired)
-	found, err := currentConnectionFile.FindConnection(connection)
-	if err != nil {
-		t.Error(err)
-	}
-	if !found {
-		t.Errorf("failed to record connection %v", connection)
+	for _, connectionGenerator := range helper.ConnectionGenerators {
+		connection := connectionGenerator()
+		err := comm.Record(connection)
+		if err != nil {
+			t.Error(err)
+		}
+		currentConnectionFile := NewConnectionFile(desired)
+		found, err := currentConnectionFile.FindConnection(connection)
+		if err != nil {
+			t.Error(err)
+		}
+		if !found {
+			t.Errorf("failed to record connection %v", connection)
+		}
 	}
 }
 
@@ -63,9 +87,10 @@ func TestReceivedReportsAllUnlinkedConnections(t *testing.T) {
 	defer os.Remove(current)
 	comm := NewCommunicator(desired, current)
 	connections := []*data.Connection{
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-		helper.RandomConnection(),
+		helper.RandomEmailConnection(),
+		helper.RandomSmsConnection(),
+		helper.RandomEmailConnection(),
+		helper.RandomSmsConnection(),
 	}
 	for _, connection := range connections {
 		err := comm.Record(connection)
@@ -103,22 +128,42 @@ func TestReceivedReportsAllUnlinkedConnections(t *testing.T) {
 
 func TestSentReportsAllLinkedConnections(t *testing.T) {
 	sesPublisher = mockSesPublisher
+	smsPublisher = mockSmsPublisher
 	defer func() {
 		sesPublisher = realSesPublisher
+		smsPublisher = realSmsPublisher
 	}()
 	desired, current := "TestSentReportsAllLinkedConnections.desired", "TestSentReportsAllLinkedConnections.current"
 	defer os.Remove(desired)
 	defer os.Remove(current)
 	comm := NewCommunicator(desired, current)
-	connections := []*data.Connection{
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-	}
-	for _, connection := range connections {
-		_, err := comm.Link(connection)
-		if err != nil {
-			t.Error(err)
+	var sender Sender
+	var err error
+	var allConnections []*data.Connection
+	for connectionType, connectionGenerator := range helper.ConnectionGenerators {
+		connections := []*data.Connection{
+			connectionGenerator(),
+			connectionGenerator(),
+			connectionGenerator(),
+		}
+		allConnections = append(allConnections, connections...)
+		for _, connection := range connections {
+			switch connectionType {
+			case "email":
+				sender, err = EmailFromConnection(connection)
+				if err != nil {
+					t.Error(err)
+				}
+			case "sms":
+				sender, err = SmsFromConnection(connection)
+				if err != nil {
+					t.Error(err)
+				}
+			}
+			_, err := comm.Link(connection, sender)
+			if err != nil {
+				t.Error(err)
+			}
 		}
 	}
 	var reported []*data.Connection
@@ -131,11 +176,11 @@ func TestSentReportsAllLinkedConnections(t *testing.T) {
 	for linkedConnection := range linkReporter {
 		reported = append(reported, linkedConnection)
 	}
-	if len(reported) != len(connections) {
-		t.Errorf("expected %v linked connections, got %v", len(connections), len(reported))
+	if len(reported) != len(allConnections) {
+		t.Errorf("expected %v linked connections, got %v", len(allConnections), len(reported))
 	}
 	var match bool
-	for _, connection := range connections {
+	for _, connection := range allConnections {
 		match = false
 		for _, linked := range reported {
 			if connection.Equals(linked) {
@@ -151,44 +196,64 @@ func TestSentReportsAllLinkedConnections(t *testing.T) {
 
 func TestReconcileLinksAllUnlinkedConnections(t *testing.T) {
 	sesPublisher = mockSesPublisher
+	smsPublisher = mockSmsPublisher
 	defer func() {
 		sesPublisher = realSesPublisher
+		smsPublisher = realSmsPublisher
 	}()
 	desired, current := "TestReconcileLinksAllUnlinkedConnections.desired", "TestReconcileLinksAllUnlinkedConnections.current"
 	defer os.Remove(desired)
 	defer os.Remove(current)
 	comm := NewCommunicator(desired, current)
-	connections := []*data.Connection{
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-	}
-	for _, connection := range connections {
-		_, err := comm.Link(connection)
-		if err != nil {
-			t.Error(err)
+	var allUnmadeConnections []*data.Connection
+	var sender Sender
+	var err error
+	for connectionType, connectionGenerator := range helper.ConnectionGenerators {
+		connections := []*data.Connection{
+			connectionGenerator(),
+			connectionGenerator(),
+			connectionGenerator(),
 		}
-	}
-	unmadeConnections := []*data.Connection{
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-	}
-	for _, connection := range unmadeConnections {
-		err := comm.Record(connection)
-		if err != nil {
-			t.Error(err)
+		for _, connection := range connections {
+			switch connectionType {
+			case "email":
+				sender, err = EmailFromConnection(connection)
+				if err != nil {
+					t.Error(err)
+				}
+			case "sms":
+				sender, err = SmsFromConnection(connection)
+				if err != nil {
+					t.Error(err)
+				}
+			}
+			_, err := comm.Link(connection, sender)
+			if err != nil {
+				t.Error(err)
+			}
+		}
+		unmadeConnections := []*data.Connection{
+			connectionGenerator(),
+			connectionGenerator(),
+			connectionGenerator(),
+		}
+		allUnmadeConnections = append(allUnmadeConnections, unmadeConnections...)
+		for _, connection := range unmadeConnections {
+			err := comm.Record(connection)
+			if err != nil {
+				t.Error(err)
+			}
 		}
 	}
 	reconciled, err := comm.Reconcile()
 	if err != nil {
 		t.Error(err)
 	}
-	if len(reconciled) != len(unmadeConnections) {
-		t.Errorf("expected %v linked connections, got %v", len(unmadeConnections), len(reconciled))
+	if len(reconciled) != len(allUnmadeConnections) {
+		t.Errorf("expected %v linked connections, got %v", len(allUnmadeConnections), len(reconciled))
 	}
 	var match bool
-	for _, connection := range unmadeConnections {
+	for _, connection := range allUnmadeConnections {
 		match = false
 		for _, linked := range reconciled {
 			if connection.Equals(linked) {

@@ -13,24 +13,21 @@ import (
 )
 
 // default anonymous user token, c.g a token's antonym
-const AnonToker = "antonym"
+const AnonToken = "antonym"
 
-// default user connections are sent to and from
-var toker = os.Getenv("TOKER")
-
-// Connection holds information needed to record, report, and link a connection
+// Connection represents a static bidirectional communication
+// e.g. Congress.
 type Connection struct {
-	// Contents of the connection
-	Message string `json:"message"`
 	// Address of the sender
 	Sender string `json:"sender"`
-	// Whether the sender would like to auto-receive
-	// email connections related to this connection
-	SubscribeToMailingList bool `json:"subscribe_to_mailing_list"`
+	// Address of the receiver
+	Receiver string `json:"receiver"`
 	// Time message was received from the sender
-	ReceiveEpoch int64 `json:"receive_epoch"`
+	SendEpoch int64 `json:"send_epoch"`
+	// Contents of the connection
+	Message string `json:"message"`
 	// Time message was sent to the receiver
-	ConnectEpoch int64 `json:"connect_epoch"`
+	ReceiveEpoch int64 `json:"receive_epoch"`
 }
 
 // Connections are an array
@@ -42,29 +39,29 @@ type Connections struct {
 func (c *Connection) baseString() (stringy string) {
 	encodedMessage := hex.EncodeToString([]byte(c.Message))
 	if c.Sender == "" {
-		c.Sender = fmt.Sprintf("%v:%v", AnonToker, toker)
+		c.Sender = AnonToken
 	}
-	encodedConnectId := hex.EncodeToString([]byte(c.Sender))
-	stringy = fmt.Sprintf("%v:%v %v %t %v", encodedConnectId,
-		toker,
-		encodedMessage,
-		c.SubscribeToMailingList,
-		c.ReceiveEpoch)
+	encodedSender := hex.EncodeToString([]byte(c.Sender))
+	encodedReciever := hex.EncodeToString([]byte(c.Receiver))
+	stringy = fmt.Sprintf("%v %v %v %v", encodedSender,
+		encodedReciever,
+		c.SendEpoch,
+		encodedMessage)
 	return stringy
 }
 
 func (c *Connection) String() (stringy string) {
 	base := c.baseString()
-	stringy = fmt.Sprintf("%v %v", base, c.ConnectEpoch)
+	stringy = fmt.Sprintf("%v %v", base, c.ReceiveEpoch)
 	return stringy
 }
 
 // Equals returns bool indicating whether the
 // connection matches the other connection
-// Matches on 3-tuple of:
-// message, sender, receive time.
+// Matches on 4-tuple of:
+// sender, receiver, send time, and message.
 func (c *Connection) Equals(other *Connection) (equal bool) {
-	equal = c.Message == other.Message && c.Sender == other.Sender && c.ReceiveEpoch == other.ReceiveEpoch
+	equal = c.Sender == other.Sender && c.Receiver == other.Receiver && c.SendEpoch == other.SendEpoch && c.Message == other.Message
 	return equal
 }
 
@@ -76,39 +73,40 @@ func ConnectionFromString(raw string) (connection *Connection, err error) {
 		// TODO: Return named error
 		return connection, errors.New(fmt.Sprintf("Invalid persisted connection: %v", persistedConnection))
 	}
-	decodedMessage, err := hex.DecodeString(persistedConnection[1])
+	encodedSender := persistedConnection[0]
+	decodedSender, err := hex.DecodeString(encodedSender)
 	if err != nil {
 		// TODO: Return named error
 		return connection, err
 	}
-	subscribeToMailingList, err := strconv.ParseBool(persistedConnection[2])
+	encodedReciever := persistedConnection[1]
+	decodedReciever, err := hex.DecodeString(encodedReciever)
 	if err != nil {
 		// TODO: Return named error
 		return connection, err
 	}
-	encodedSender := strings.Split(persistedConnection[0], fmt.Sprintf(":%v", toker))[0]
-	decoded_sender, err := hex.DecodeString(encodedSender)
+	sendEpoch, err := strconv.ParseInt(persistedConnection[2], 10, 64)
 	if err != nil {
 		// TODO: Return named error
 		return connection, err
 	}
-	receiveEpoch, err := strconv.ParseInt(persistedConnection[3], 10, 64)
+	decodedMessage, err := hex.DecodeString(persistedConnection[3])
 	if err != nil {
 		// TODO: Return named error
 		return connection, err
 	}
 	connection = &Connection{
-		Sender:                 string(decoded_sender),
-		Message:                string(decodedMessage),
-		SubscribeToMailingList: subscribeToMailingList,
-		ReceiveEpoch:           receiveEpoch}
+		Sender:    string(decodedSender),
+		Receiver:  string(decodedReciever),
+		SendEpoch: sendEpoch,
+		Message:   string(decodedMessage)}
 	if len(persistedConnection) > 4 {
-		connectEpoch, err := strconv.ParseInt(persistedConnection[4], 10, 64)
+		receiveEpoch, err := strconv.ParseInt(persistedConnection[4], 10, 64)
 		if err != nil {
 			// TODO: Return named error
 			return connection, err
 		}
-		connection.ConnectEpoch = connectEpoch
+		connection.ReceiveEpoch = receiveEpoch
 	}
 	return connection, err
 }

@@ -9,8 +9,17 @@ import (
 	"testing"
 )
 
+var randomConnections = []*data.Connection{
+	helper.RandomEmailConnection(),
+	helper.RandomSmsConnection(),
+	helper.RandomEmailConnection(),
+	helper.RandomSmsConnection(),
+	helper.RandomEmailConnection(),
+	helper.RandomSmsConnection(),
+}
+
 func TestSerializeConnectionReturnsSameConnectionAsBytes(t *testing.T) {
-	connection := helper.RandomConnection()
+	connection := helper.RandomEmailConnection()
 	serializedConnection, err := SerializeConnection(connection)
 	if err != nil {
 		t.Errorf("error serializing connection %v:%v\n", connection, err)
@@ -21,7 +30,7 @@ func TestSerializeConnectionReturnsSameConnectionAsBytes(t *testing.T) {
 }
 
 func TestDeserializeConnectionReturnsSameConnectionAsInterface(t *testing.T) {
-	connection := helper.RandomConnection()
+	connection := helper.RandomEmailConnection()
 	serializedConnection, err := SerializeConnection(connection)
 	if err != nil {
 		t.Errorf("error serializing connection %v:%v\n", connection, err)
@@ -43,7 +52,7 @@ func TestWriteConnectionWritesSerializedConnectionToConnectionFile(t *testing.T)
 	connectionFilePath := "TestWriteConnectionWritesSerializedConnectionToConnectionFile.txt"
 	defer os.Remove(connectionFilePath)
 	connectionFile := NewConnectionFile(connectionFilePath)
-	connection := helper.RandomConnection()
+	connection := helper.RandomEmailConnection()
 	err := connectionFile.WriteConnection(connection)
 	if err != nil {
 		t.Errorf("%v failed writing connection %v to %v\n", err, connection, connectionFilePath)
@@ -66,21 +75,16 @@ func TestWriteConnectionsWritesSerializedConnectionsToConnectionFile(t *testing.
 	connectionFilePath := "TestWriteConnectionsWritesSerializedConnectionsToConnectionFile.txt"
 	defer os.Remove(connectionFilePath)
 	connectionFile := NewConnectionFile(connectionFilePath)
-	connections := []*data.Connection{
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-	}
-	err := connectionFile.WriteConnections(connections)
+	err := connectionFile.WriteConnections(randomConnections)
 	if err != nil {
-		t.Errorf("%v failed writing connections %v to %v\n", err, connections, connectionFilePath)
+		t.Errorf("%v failed writing connections %v to %v\n", err, randomConnections, connectionFilePath)
 	}
 	rawFile, err := os.OpenFile(connectionFilePath, os.O_RDONLY, 0644)
 	if err != nil {
 		t.Error(err)
 	}
 	reader := bufio.NewReader(rawFile)
-	for _, connection := range connections {
+	for _, connection := range randomConnections {
 		wroteConnection, err := reader.ReadBytes('\n')
 		if err != nil {
 			t.Error(err)
@@ -95,7 +99,7 @@ func TestFindConnectionFindsWroteConnectionInConnectionFile(t *testing.T) {
 	connectionFilePath := "TestFindConnectionFindsWroteConnectionInConnectionFile.txt"
 	defer os.Remove(connectionFilePath)
 	connectionFile := NewConnectionFile(connectionFilePath)
-	connection := helper.RandomConnection()
+	connection := helper.RandomEmailConnection()
 	err := connectionFile.WriteConnection(connection)
 	if err != nil {
 		t.Errorf("%v failed writing connection %v to %v\n", err, connection, connectionFilePath)
@@ -113,21 +117,16 @@ func TestFindConnectionsFindsWroteConnectionsInConnectionFile(t *testing.T) {
 	connectionFilePath := "TestFindConnectionsFindsWroteConnectionsInConnectionFile.txt"
 	defer os.Remove(connectionFilePath)
 	connectionFile := NewConnectionFile(connectionFilePath)
-	connections := []*data.Connection{
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-	}
-	err := connectionFile.WriteConnections(connections)
+	err := connectionFile.WriteConnections(randomConnections)
 	if err != nil {
-		t.Errorf("%v failed writing connections %v to %v\n", err, connections, connectionFilePath)
+		t.Errorf("%v failed writing connections %v to %v\n", err, randomConnections, connectionFilePath)
 	}
-	wroteConnections, errs := connectionFile.FindConnections(connections)
+	wroteConnections, errs := connectionFile.FindConnections(randomConnections)
 	for err := range errs {
 		t.Error(err)
 	}
 	var match bool
-	for _, connection := range connections {
+	for _, connection := range randomConnections {
 		match = false
 		for _, wroteConnection := range wroteConnections {
 			if connection.Equals(wroteConnection) {
@@ -145,14 +144,9 @@ func TestEachReturnsAllWroteConnectionsInConnectionFile(t *testing.T) {
 	connectionFilePath := "TestEachReturnsAllWroteConnectionsInConnectionFile.txt"
 	defer os.Remove(connectionFilePath)
 	connectionFile := NewConnectionFile(connectionFilePath)
-	connections := []*data.Connection{
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-		helper.RandomConnection(),
-	}
-	err := connectionFile.WriteConnections(connections)
+	err := connectionFile.WriteConnections(randomConnections)
 	if err != nil {
-		t.Errorf("%v failed writing connections %v to %v\n", err, connections, connectionFilePath)
+		t.Errorf("%v failed writing connections %v to %v\n", err, randomConnections, connectionFilePath)
 	}
 	stop := make(chan struct{})
 	defer close(stop)
@@ -164,11 +158,11 @@ func TestEachReturnsAllWroteConnectionsInConnectionFile(t *testing.T) {
 	for wroteConnection := range each {
 		wroteConnections = append(wroteConnections, wroteConnection)
 	}
-	if len(wroteConnections) != len(connections) {
-		t.Errorf("expecting %v wrote connections, got %v", len(connections), len(wroteConnections))
+	if len(wroteConnections) != len(randomConnections) {
+		t.Errorf("expecting %v wrote connections, got %v", len(randomConnections), len(wroteConnections))
 	}
 	var match bool
-	for _, connection := range connections {
+	for _, connection := range randomConnections {
 		match = false
 		for _, wroteConnection := range wroteConnections {
 			if connection.Equals(wroteConnection) {

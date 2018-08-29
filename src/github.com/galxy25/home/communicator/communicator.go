@@ -5,12 +5,8 @@ import (
 	"fmt"
 	"github.com/galxy25/home/data"
 	log "github.com/sirupsen/logrus"
-	"os"
 	"time"
 )
-
-// Address for receiving email communications.
-var homeEmail = os.Getenv("HOME_EMAIL")
 
 // Configure package logging context
 var packageLogger = log.WithFields(log.Fields{
@@ -24,40 +20,39 @@ type Communicator struct {
 	currentConnections ConnectionFile
 }
 
-// Link attempts to make a connection,
-// returning made connection and error (if any).
-func (c *Communicator) Link(newConnection *data.Connection) (madeConnection *data.Connection, err error) {
-	// XXX: only email's for the moment
-	// coming soon: SMS, Slack, SnapChat
-	// FB messenger, twitter, ...
-	email := &Email{
-		Message:   newConnection.Message,
-		Sender:    newConnection.Sender,
-		Receivers: []string{homeEmail},
-		Subject:   fmt.Sprintf("%v -> www.levi.casa", newConnection.Sender),
-	}
-	err = email.Send()
+// Sender implements sending a connection over
+// the senders protocol.
+type Sender interface {
+	Send() (err error)
+}
+
+// Link attempts to make a connection using the send()
+// protocol of the provided sender
+// returning made connection and send error (if any).
+func (c *Communicator) Link(newConnection *data.Connection, sender Sender) (madeConnection *data.Connection, err error) {
+	err = sender.Send()
 	if err != nil {
 		packageLogger.WithFields(log.Fields{
-			"executor":           "#Link.Email.#Send",
-			"command_parameters": email,
-			"error":              err.Error(),
-			"connection":         newConnection,
+			"executor":    "#Link.sender.#Send",
+			"error":       err.Error(),
+			"connection":  newConnection,
+			"sender_type": fmt.Sprintf("%T", sender),
 		}).Error("error making connection")
 		return madeConnection, err
 	}
 	connectedTimestamp := time.Now()
 	connectEpoch := connectedTimestamp.Unix()
-	newConnection.ConnectEpoch = connectEpoch
+	newConnection.ReceiveEpoch = connectEpoch
 	packageLogger.WithFields(log.Fields{
-		"executor":   "#Link",
-		"connection": newConnection,
+		"executor":    "#Link",
+		"connection":  newConnection,
+		"sender_type": fmt.Sprintf("%T", sender),
 	}).Info("successfully linked connection")
 	err = c.currentConnections.WriteConnection(newConnection)
 	return newConnection, err
 }
 
-// Record records new connection
+// Record records a new connection
 // returning error (if any).
 func (c *Communicator) Record(newConnection *data.Connection) (err error) {
 	err = c.desiredConnections.WriteConnection(newConnection)
@@ -72,32 +67,20 @@ func (c *Communicator) Sent(finish <-chan struct{}) (linked chan *data.Connectio
 	return linked, err
 }
 
-// Received reports all received connections
-// for a communicator, returning those connections
-// and error (if any). Received connections will also appear
-// in the list of connections reported by Communicator.Sent
-// if the connection has been linked.
-// To stop an in progress report, send on the finish channel.
-func (c *Communicator) Received(finish <-chan struct{}) (unlinked chan *data.Connection, err error) {
-	unlinked, err = c.desiredConnections.Each(finish)
-	return unlinked, err
-}
-
-// Reconcile attempts to link all
-// unconnected connections, returning
-// reconciled connections and error (if any).
-func (c *Communicator) Reconcile() (reconciled []*data.Connection, err error) {
+// Unsent returns all connections that have been
+// received but not sent, and error (if any).
+func (c *Communicator) Unsent() (unlinked []*data.Connection, err error) {
 	stop := make(chan struct{})
 	defer close(stop)
 	desired, err := c.Received(stop)
 	if err != nil {
-		return reconciled, err
+		return unlinked, err
 	}
 	current, err := c.Sent(stop)
 	if err != nil {
-		return reconciled, err
+		return unlinked, err
 	}
-	var linked, maybeLinked, unlinked []*data.Connection
+	var linked, maybeLinked []*data.Connection
 	for connection := range desired {
 		maybeLinked = append(maybeLinked, connection)
 	}
@@ -118,13 +101,40 @@ func (c *Communicator) Reconcile() (reconciled []*data.Connection, err error) {
 		}
 		unlinked = append(unlinked, connection)
 	}
+	return unlinked, err
+}
+
+// Received reports all received connections
+// for a communicator, returning those connections
+// and error (if any). Received connections will also appear
+// in the list of connections reported by Communicator.Sent
+// if the connection has been linked.
+// To stop an in progress report, send on the finish channel.
+func (c *Communicator) Received(finish <-chan struct{}) (unlinked chan *data.Connection, err error) {
+	unlinked, err = c.desiredConnections.Each(finish)
+	return unlinked, err
+}
+
+// Reconcile attempts to link all
+// unconnected connections, returning
+// reconciled connections and error (if any).
+func (c *Communicator) Reconcile() (reconciled []*data.Connection, err error) {
+	unlinked, err := c.Unsent()
+	if err != nil {
+		return reconciled, err
+	}
 	for _, connection := range unlinked {
-		connected, err := c.Link(connection)
+		sender, err := Translate(connection)
+		if err != nil {
+			continue
+		}
+		connected, err := c.Link(connection, sender)
 		if err != nil {
 			packageLogger.WithFields(log.Fields{
-				"executor":   "#Reconcile.#Link",
-				"connection": connection,
-				"err":        err,
+				"executor":    "#Reconcile.#Link",
+				"connection":  connection,
+				"err":         err,
+				"sender_type": fmt.Sprintf("%T", sender),
 			}).Error("failed to link connection")
 			// TODO: return [] of unreconciled?
 			continue

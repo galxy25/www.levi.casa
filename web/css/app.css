@@ -12,24 +12,18 @@
     margin-top: 15px;
 }
 
-.mailing-list-check-box label {
-    display: inline;
-}
-
-.do-connect-button {
-    margin-top: 30px;
-}
-
-.do-connect-close-button {
-    margin-left: 14px;
-}
-
-#email-connect {
+#connect-message {
+    margin-top: 10px;
     height: 106px;
     width: 836px;
 }
 
-#text-connect {
-    height: 76px;
-    width: 836px;
+#do-connect {
+    margin-left: 10px;
+}
+
+#connect-or{
+    margin-top: 40px;
+    font-weight: bold;
+    text-align: center;
 }

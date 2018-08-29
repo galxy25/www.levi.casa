@@ -24,21 +24,20 @@ if (window.location.hostname === "localhost") {
 
 // REACT
 
-// Set event handlers for
+// Set event handler for
 // user connection actions
 $(".do-connect-button").click(function(){
-    let current_element = $(this)[0];
-    do_connect(current_element);
+    do_connect();
 });
 
 // DATA
 
 // eXecute In Place data for
 // Extraction and reseting of
-// email connection info
-let email_extract_and_reset_xip = [
+// connection info
+let connection_extract_and_reset_xip = [
     {
-        selector: '#email-connect',
+        selector: '#connect-message',
         index: 0,
         accesor: 'value',
         reset_to: "''",
@@ -49,70 +48,61 @@ let email_extract_and_reset_xip = [
         index: 0,
         accesor: 'value',
         reset_to: "''",
-        store_as: 'sender'
-    },
-    {
-        selector: '#subscribe-to-mailing-list',
-        index: 0,
-        accesor: 'checked',
-        reset_to: false,
-        store_as: 'subscribe_to_mailing_list'
-    }
-];
-// eXecute In Place data for
-// Extraction and reseting of
-// text connection info
-let text_extract_and_reset_xip = [
-    {
-        selector: '#text-connect',
-        index: 0,
-        accesor: 'value',
-        reset_to: "''",
-        store_as: 'message'
+        store_as: 'sender_email'
     },
     {
         selector: '#text-connect-id',
         index: 0,
         accesor: 'value',
         reset_to: "''",
-        store_as: 'sender'
+        store_as: 'sender_phone'
     }
 ];
-// Connection input data getter and reseter
-// for a given connect input element
-let do_connect_extractor_xips = {
-    "do-email-connect": email_extract_and_reset_xip,
-    "do-text-connect": text_extract_and_reset_xip
-};
 
 // LIBRARY
 
 // Execute user connection requests
-function do_connect(trigger_element) {
-    let trigger_id = trigger_element.id;
-    // Alert the user connection is in progress
-    trigger_element.textContent = "Connecting...";
+function do_connect() {
     // Extract and reset user connection data
-    // let connection_info = do_connect_extractor_xips[trigger_id](trigger_element);
-    let connection_info = extract_and_reset_connection_request(do_connect_extractor_xips[trigger_id]);
-    // Submit user connection request
-    return call_backend("/connect", "POST", connection_info, "json",on_success, on_failure).then(function(response){
+    let connection_info = extract_and_reset_connection_request(connection_extract_and_reset_xip);
+    let connection_type = "";
+    // Validate either
+    // no connect-id is provided
+    // in which case default to sending an email
+    // more than one connect-id is provided
+    // in which case return an error to the user
+    // or one connect-id is provided
+    // in which case use it.
+    if (connection_info.sender_phone === "" && connection_info.sender_email === "") {
+        connection_type = "email";
+        connection_info.sender = "";
+    } else if (connection_info.sender_phone !== "" && connection_info.sender_email !== "") {
+        alert("Please provide only one of email or phone number");
+        return false
+    } else if(connection_info.sender_phone !== "") {
+        connection_type = "sms";
+        connection_info.sender = connection_info.sender_phone;
+    } else {
+        connection_type = "email";
+        connection_info.sender = connection_info.sender_email;
+    }
+    // Based off connect-id type, call appropriate
+    // backend endpoint
+    return call_backend("/"+connection_type, "POST", connection_info, "json",on_success, on_failure).then(function(response){
         console.log(`Successful connection: ${JSON.stringify(response)}`);
     });
     // Alert user to connection success
     // and reset input element to ready state
     function on_success(data){
         alert(`Connected with: ${JSON.stringify(connection_info)} Response: ${JSON.stringify(data)}`);
-        trigger_element.textContent = "We're connected!";
         setTimeout(function(){
-            trigger_element.textContent = "Send";
         }, 2000);
     }
     // Alert user to connection failure
     function on_failure(data){
-        trigger_element.textContent = "Send";
         alert(`Failed: ${JSON.stringify(data)}`);
     }
+    return true
 }
 // Make an AJAX call to the desired backend endpoint
 // with the specified data and event handlers
