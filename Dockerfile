@@ -19,11 +19,16 @@ RUN make build
 # Run the home command by default
 # when the container starts.
 ENTRYPOINT /go/bin/home
-# Document that the service listens on port 8081.
-EXPOSE 8081
+# Document that the service listens on standard web ports
+EXPOSE 443 80
+# Provide --build-arg HOME_ADDRESS to specify
+# the DNS name (required) used to address this
+# service.
+# See README.md for DNS setup instructions.
+ARG HOME_ADDRESS
 # Run health checks against the web server's health endpoint
 #   /ping
 #   every 1 minute
-#   timeong out after 3 seconds
+#   timeing out after 3 seconds
 HEALTHCHECK --interval=1m --timeout=3s \
-  CMD curl -f http://localhost:8081/ping || exit 1
+  CMD curl -f https://$HOME_ADDRESS/ping || exit 1

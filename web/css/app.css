@@ -12,6 +12,11 @@
     margin-top: 15px;
 }
 
+#tri-force {
+    height: 100%!important;
+    border: 0px;
+}
+
 #connect-message {
     margin-top: 10px;
     height: 106px;
