@@ -4,11 +4,13 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"github.com/galxy25/home/communicator"
 	"github.com/galxy25/home/data"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/acme/autocert"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -27,6 +29,12 @@ var currentConnectionsFilePath = os.Getenv("CURRENT_CONNECTIONS_FILEPATH")
 
 // Port that web server should listen on
 var homePort, _ = strconv.Atoi(os.Getenv("HOME_PORT"))
+
+// Port to use for making Automatic Certificate Management Environment requests
+var acmePort = os.Getenv("ACME_PORT")
+
+// Address that clients can use to find Levi's digital home.
+var homeAddress = os.Getenv("HOME_ADDRESS")
 
 // Address for receiving email communications.
 var homeEmail = os.Getenv("HOME_EMAIL")
@@ -325,9 +333,26 @@ func main() {
 			"reconciled": reconciled,
 		}).Info("reconciled connections")
 	}()
+	// Set up automatic X.509 certificate management
+	// via Lets Encrypt.
+	// https://goenning.net/2017/11/08/free-and-automated-ssl-certificates-with-go/
+	certManager := autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		Cache:      autocert.DirCache("tls"),
+		HostPolicy: autocert.HostWhitelist(homeAddress, fmt.Sprintf("www.%v", homeAddress)),
+	}
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%v", homePort),
+		Handler: jsonLoggingHandler(httpd),
+		TLSConfig: &tls.Config{
+			GetCertificate: certManager.GetCertificate,
+		},
+	}
+	// Run http server to respond to ACME challenges
+	go http.ListenAndServe(fmt.Sprintf(":%v", acmePort), certManager.HTTPHandler(nil))
 	// Run web service for clients
-	// of www.levi.casa
-	err := http.ListenAndServe(fmt.Sprintf(":%v", homePort), jsonLoggingHandler(httpd))
+	// of https://www.levi.casa
+	err := server.ListenAndServeTLS("", "")
 	if err != nil {
 		packageLogger.WithFields(log.Fields{
 			"resource": "io/port",

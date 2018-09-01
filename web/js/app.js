@@ -18,8 +18,8 @@ function update_displayed_date(){
     $("#current-time > a").text(current_time);
 }
 // For local development/avoiding infinite routing loops
-if (window.location.hostname === "localhost") {
-    $("#what-am-I-doing")[0].href = "http://10.0.0.139:8080";
+if (window.location.search === "?local") {
+    $("#what-am-I-doing")[0].href = "https://10.0.0.139:8080";
 }
 
 // REACT

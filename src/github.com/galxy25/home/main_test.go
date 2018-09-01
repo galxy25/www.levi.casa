@@ -64,7 +64,7 @@ func (l *HomeTestProcess) Start() (err error) {
 	// Set runtime values
 	l.pid, err = strconv.Atoi(string_pid)
 	l.host_port = homePort
-	l.host_name = "localhost"
+	l.host_name = homeAddress
 	if err != nil {
 		l.test_context.Logf("Failed to convert %v to int", string_pid)
 		return err
@@ -190,14 +190,14 @@ func (l *HomeTestProcess) client(endpoint Endpoint, body interface{}) (response 
 // host_address returns the network address of the
 // host running the home test process
 func (l *HomeTestProcess) host_address() (address string) {
-	address = fmt.Sprintf("%v:%v", l.host_name, l.host_port)
+	address = fmt.Sprintf("%v", l.host_name)
 	return address
 }
 
 // endpoint_uri returns the network URI
 // exposed by the running home for the provided endpoint
 func (l *HomeTestProcess) endpoint_uri(endpoint Endpoint) (endpoint_uri string) {
-	endpoint_uri = fmt.Sprintf("http://%v%v", l.host_address(), endpoint.Path)
+	endpoint_uri = fmt.Sprintf("https://%v%v", l.host_address(), endpoint.Path)
 	return endpoint_uri
 }
 

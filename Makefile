@@ -5,7 +5,7 @@ ROOT_PACKAGE=github.com/galxy25/home
 GOPATH=$(PWD)
 export GOPATH=$(PWD)
 
-.PHONY: install build clean lint test all start run stop restart rere docker_build docker_run docker_tag docker_push docker_pull docker_clean
+.PHONY: install build clean lint test all start run stop restart rere docker_build docker_build_prod docker_run docker_tag docker_push docker_pull docker_clean
 
 lint :
 	echo "Linting"
@@ -32,6 +32,7 @@ test : lint build
 		go test -v -timeout 10s -cover --race; \
 		cd ../data; \
 		go test -v -timeout 3s -cover --race
+
 doc :
 	echo "Backgrounding godoc server at http://localhost:2022"
 	nohup godoc -http=:2022 >> godoc.out 2>&1 &
@@ -62,22 +63,27 @@ rere : stop run
 
 docker_build :
 	echo "Building docker image casa from latest source"
-	docker build -t casa .
+	docker build -t casa --build-arg HOME_ADDRESS=$$HOME_ADDRESS .
+
+docker_build_prod:
+	echo "Building docker image casa_prod from latest source"
+	docker build -t casa_prod --build-arg HOME_ADDRESS=$$PROD_ADDRESS .
 
 docker_run :
 	echo "Running docker image casa:latest"
-	docker run -d -p $$HOME_PORT:$$HOME_PORT/tcp --mount type=bind,source="$$(pwd)/data",target=/go/data --env-file Envfile -e AWS_DEFAULT_REGION=$$AWS_DEFAULT_REGION -e AWS_ACCESS_KEY_ID=$$AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$$AWS_SECRET_ACCESS_KEY casa:latest
+	docker run -d -p $$HOME_PORT:$$HOME_PORT/tcp -p $$ACME_PORT:$$ACME_PORT/tcp --mount type=bind,source="$$(pwd)/data",target=/go/data --mount type=bind,source="$$(pwd)/tls",target=/go/tls --env-file Envfile -e AWS_DEFAULT_REGION=$$AWS_DEFAULT_REGION -e AWS_ACCESS_KEY_ID=$$AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$$AWS_SECRET_ACCESS_KEY casa:latest | tail -n 1 | xargs echo > docker.pid
+		cat docker.pid
 
 docker_stop :
-	echo "Stopping all containers listening on TCP socket 8081"
-	docker ps | grep '[8]081/tcp' | awk '{ print $$1 }' | xargs docker kill
+	echo "Stopping any previously running docker container instance"
+	cat docker.pid | xargs docker kill
 
 docker_restart : docker_stop docker_run
 	echo "Restarting web server image"
 
-docker_tag : docker_build
+docker_tag : docker_build_prod
 	@echo "Tagging docker image casa for galxy25/www.levi.casa with tag $$VERSION"
-	@docker tag casa galxy25/www.levi.casa:$$VERSION
+	@docker tag casa_prod galxy25/www.levi.casa:$$VERSION
 
 docker_push :
 	echo "Pushing all tagged images for galxy25/www.levi.casa"
@@ -99,6 +105,7 @@ clean :
 	rm -f home.out
 	rm -f godoc.out
 	rm -f data/*
+	rm docker.pid
 
 all : clean install test doc start
 	echo "Installing, linting, building, testing, doc'ing, starting"

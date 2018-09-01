@@ -55,7 +55,11 @@
 [[projects]]
   branch = "master"
   name = "golang.org/x/crypto"
-  packages = ["ssh/terminal"]
+  packages = [
+    "acme",
+    "acme/autocert",
+    "ssh/terminal"
+  ]
   revision = "8ac0e0d97ce45cd83d1d7243c060cb8461dda5e9"
 
 [[projects]]
@@ -70,6 +74,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6c067c4e81af49258298ef2115aedeaecd310b35625862c947d604bec728f5c3"
+  inputs-digest = "46b2685c580f04ace7c122f1462592162a24caa45cd9daed86ae5fd8ab265e91"
   solver-name = "gps-cdcl"
   solver-version = 1
