@@ -1,0 +1,14 @@
+AWS_SDK_LOAD_CONFIG=1
+DESIRED_CONNECTIONS_FILEPATH=data/desired_connections.txt
+CURRENT_CONNECTIONS_FILEPATH=data/current_connections.txt
+TLS_CACHE_DIR=tls
+HOME_PORT=443
+HOME_ADDRESS=duck-type.com
+# Only used by the build system
+PROD_HOME_ADDRESS=levi.casa
+HOME_SES_REGION=us-west-2
+HOME_SES_SOURCE=levismschoen@gmail.com
+HOME_EMAIL=levismschoen@gmail.com
+HOME_PHONE_NUMBER=+15416530125
+CONGRESS_PHONE_NUMBER=+19718002120
+ACME_PORT=80

@@ -1,0 +1,34 @@
+:root {
+    --space-jet: #191919; /* Somewhere between space gray and jet black. */
+}
+.top-bar {
+    background-color: var(--space-jet);
+}
+.top-bar ul {
+    background-color: var(--space-jet);
+}
+
+.nav-totem {
+    margin-top: 15px;
+}
+
+#tri-force {
+    height: 100%!important;
+    border: 0px;
+}
+
+#connect-message {
+    margin-top: 10px;
+    height: 106px;
+    width: 836px;
+}
+
+#do-connect {
+    margin-left: 10px;
+}
+
+#connect-or{
+    margin-top: 40px;
+    font-weight: bold;
+    text-align: center;
+}
