@@ -44,7 +44,7 @@
             <ul class="menu vertical">
               <li><a href="#" data-toggle="do-connect">Communicate</a></li>
               <li><a href="#" data-toggle="do-share">Share</a></li>
-              <li><a href="#" data-toggle="do-tell">Assemble</a></li>
+              <li><a href="#" data-toggle="do-join">Assemble</a></li>
             </ul>
           </li>
           <li class="nav-totem" id="current-date"><a href="#">Date</a></li>
@@ -71,7 +71,7 @@
         <!-- #$AUTHOR:Levi Schoen -->
         <area shape="rect" coords="180,456,451,522" alt="Connect with me." href="#" data-toggle="do-connect">
         <area shape="rect" coords="754,458,936,522" alt="Share something with me." href="#" data-toggle="do-share">
-        <area shape="rect" coords="501,717,699,780" alt="Be a part of my story. " href="#" data-toggle="do-tell">
+        <area shape="rect" coords="501,717,699,780" alt="Be a part of my story. " href="#" data-toggle="do-join">
         </map>
       </div>
       <!-- End Portal map -->
@@ -122,8 +122,8 @@
             </div>
           </div>
       </form>
-    <!-- End Connect sender id input -->
-    <!-- Begin Connect input -->
+      <!-- End Connect sender id input -->
+      <!-- Begin Connect input -->
       <form>
         <div class="grid-container grid-x">
           <div class="small-12 cell" >
@@ -133,8 +133,8 @@
           </div>
         </div>
       </form>
-    <!-- End Connect input -->
-    <!-- Begin Connect buttons -->
+      <!-- End Connect input -->
+      <!-- Begin Connect buttons -->
       <div class="grid-container grid-x">
         <div class="small-10 cell left do-connect-close-button">
           <button type="button" data-toggle aria-label="Close modal" class="alert button">
@@ -147,15 +147,69 @@
           </button>
         </div>
       </div>
-    <!-- End Connect buttons -->
-    <!-- End Connect portal modal -->
-    <div id="do-share" class="reveal" data-reveal>
-        <img src="https://news.bbcimg.co.uk/media/images/65904000/jpg/_65904720_mdis_global_enhancedcolor_caloris_orth_hd.jpg"/>
-        <button class="close-button" data-close aria-label="Close modal" type="button">
-          <span aria-hidden="true">&times;</span>
-        </button>
+      <!-- End Connect buttons -->
     </div>
-    <div id="do-tell" data-reveal class="reveal">
+    <!-- End Connect portal modal -->
+    <!-- Begin Share portal modal -->
+    <div id="do-share" class="reveal" data-reveal>
+      <h1>What's interesting?</h1>
+      <!-- Begin Share input -->
+      <form>
+        <div class="grid-container grid-x">
+          <div class="small-2 cell">
+              <span>Content:</span>
+          </div>
+          <div class="small-8 left cell" id="share-content">
+            <input type="text" placeholder="www.rant-it.com" class="share-content"></input>
+          </div>
+          <div class="small-2 cell">
+            <input type="file" id="share-upload-files" multiple  accept="*/*" style="display:none">
+            <button type="button" aria-label="Share content" class="warning button" id="share-upload">
+              <span data-tooltip tabindex="1" title="Upload a picture, movie, or file to share.">Upload</span>
+            </button>
+          </div>
+        </div>
+        <div>
+          <button type="button" aria-label="Share content" class="primary button" id="share-more">
+            <span data-tooltip tabindex="1" title="Add more content to share in this post.">+More</span>
+          </button>
+        </div>
+        <br>
+        <div class="grid-container grid-x">
+          <div class="small-2 left cell">
+              <span>Thoughts:</span>
+          </div>
+          <div class="small-8 right cell" >
+            <textarea placeholder="What I've got to say about this is..." id="share-comment"></textarea>
+          </div>
+        </div>
+        <div class="grid-container grid-x">
+          <div class="small-2 left cell">
+              <span>Tags:</span>
+          </div>
+          <div class="small-8 right cell" >
+            <textarea placeholder="#music #chill #funk" id="share-tags"></textarea>
+          </div>
+        </div>
+      </form>
+      <!-- End Share input -->
+      <!-- Begin Share buttons -->
+      <div class="grid-container grid-x">
+        <div class="small-10 cell left do-share-close-button">
+          <button type="button" data-toggle aria-label="Close modal" class="alert button">
+            Close
+          </button>
+        </div>
+        <div class="small-2 cell right do-share-button">
+          <button type="button" aria-label="Post content" class="success button" id="do-share">
+            Post
+          </button>
+        </div>
+      </div>
+      <!-- End Share buttons -->
+    </div>
+    <!-- End Share portal modal -->
+    <div id="do-join" data-reveal class="reveal">
         <img src="https://upload.wikimedia.org/wikipedia/commons/1/10/Kepler10b_artist.jpg"/>
         <button class="close-button" data-close aria-label="Close modal" type="button">
           <span aria-hidden="true">&times;</span>

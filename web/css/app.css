@@ -1,9 +1,11 @@
 :root {
     --space-jet: #191919; /* Somewhere between space gray and jet black. */
 }
+
 .top-bar {
     background-color: var(--space-jet);
 }
+
 .top-bar ul {
     background-color: var(--space-jet);
 }
@@ -31,4 +33,16 @@
     margin-top: 40px;
     font-weight: bold;
     text-align: center;
+}
+
+#do-share h1 {
+    text-align: center;
+}
+
+#share-upload {
+    margin-left: 10px;
+}
+
+#share-more {
+    margin-left: 16px;
 }

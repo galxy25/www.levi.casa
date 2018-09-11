@@ -29,6 +29,25 @@ if (window.location.search === "?local") {
 $(".do-connect-button").click(function(){
     do_connect();
 });
+// Set event handler for share file upload
+$("#share-upload").click(function(){
+   $("#share-upload-files")[0].click();
+});
+// Set event handler for sharing
+// multiple content links
+$("#share-more").click(function(){
+    $("#share-content").append("<br>");
+    $(".share-content:first-of-type").clone().appendTo("#share-content");
+});
+// Set event handler to restore default UI
+// of one content link per share
+$(document).on('closed.zf.reveal', '#do-share[data-reveal]',function(){
+    $("#share-content > br").remove();
+    content_shares = $(".share-content");
+    for (i=0; i < content_shares.length - 1; i++) {
+       $(".share-content").eq(1).remove();
+    }
+});
 
 // DATA
 
@@ -104,6 +123,7 @@ function do_connect() {
     }
     return true
 }
+
 // Make an AJAX call to the desired backend endpoint
 // with the specified data and event handlers
 function call_backend(url, method, data, data_type, on_success, on_error){
