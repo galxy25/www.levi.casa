@@ -29,8 +29,8 @@ type Sender interface {
 // Link attempts to make a connection using the send()
 // protocol of the provided sender
 // returning made connection and send error (if any).
-func (c *Communicator) Link(newConnection *data.Connection, sender Sender) (madeConnection *data.Connection, err error) {
-	err = sender.Send()
+func (c *Communicator) Link(newConnection *data.Connection, sender Sender) (*data.Connection, error) {
+	err := sender.Send()
 	if err != nil {
 		packageLogger.WithFields(log.Fields{
 			"executor":    "#Link.sender.#Send",
@@ -38,7 +38,7 @@ func (c *Communicator) Link(newConnection *data.Connection, sender Sender) (made
 			"connection":  newConnection,
 			"sender_type": fmt.Sprintf("%T", sender),
 		}).Error("error making connection")
-		return madeConnection, err
+		return nil, err
 	}
 	connectedTimestamp := time.Now()
 	connectEpoch := connectedTimestamp.Unix()
@@ -54,33 +54,31 @@ func (c *Communicator) Link(newConnection *data.Connection, sender Sender) (made
 
 // Record records a new connection
 // returning error (if any).
-func (c *Communicator) Record(newConnection *data.Connection) (err error) {
-	err = c.desiredConnections.WriteConnection(newConnection)
-	return err
+func (c *Communicator) Record(newConnection *data.Connection) error {
+	return c.desiredConnections.WriteConnection(newConnection)
 }
 
 // Sent reports all linked connections
 // for a communicator, returning linked connections and error (if any).
 // To stop an in progress report, send on the finish channel.
-func (c *Communicator) Sent(finish <-chan struct{}) (linked chan *data.Connection, err error) {
-	linked, err = c.currentConnections.Each(finish)
-	return linked, err
+func (c *Communicator) Sent(finish <-chan struct{}) (chan *data.Connection, error) {
+	return c.currentConnections.Each(finish)
 }
 
 // Unsent returns all connections that have been
 // received but not sent, and error (if any).
-func (c *Communicator) Unsent() (unlinked []*data.Connection, err error) {
+func (c *Communicator) Unsent() ([]*data.Connection, error) {
 	stop := make(chan struct{})
 	defer close(stop)
 	desired, err := c.Received(stop)
 	if err != nil {
-		return unlinked, err
+		return nil, err
 	}
 	current, err := c.Sent(stop)
 	if err != nil {
-		return unlinked, err
+		return nil, err
 	}
-	var linked, maybeLinked []*data.Connection
+	var linked, maybeLinked, unlinked []*data.Connection
 	for connection := range desired {
 		maybeLinked = append(maybeLinked, connection)
 	}
@@ -110,19 +108,19 @@ func (c *Communicator) Unsent() (unlinked []*data.Connection, err error) {
 // in the list of connections reported by Communicator.Sent
 // if the connection has been linked.
 // To stop an in progress report, send on the finish channel.
-func (c *Communicator) Received(finish <-chan struct{}) (unlinked chan *data.Connection, err error) {
-	unlinked, err = c.desiredConnections.Each(finish)
-	return unlinked, err
+func (c *Communicator) Received(finish <-chan struct{}) (chan *data.Connection, error) {
+	return c.desiredConnections.Each(finish)
 }
 
 // Reconcile attempts to link all
 // unconnected connections, returning
 // reconciled connections and error (if any).
-func (c *Communicator) Reconcile() (reconciled []*data.Connection, err error) {
+func (c *Communicator) Reconcile() ([]*data.Connection, error) {
 	unlinked, err := c.Unsent()
 	if err != nil {
-		return reconciled, err
+		return nil, err
 	}
+	var reconciled []*data.Connection
 	for _, connection := range unlinked {
 		sender, err := Translate(connection)
 		if err != nil {

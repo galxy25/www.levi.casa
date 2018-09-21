@@ -12,24 +12,24 @@ import (
 // a interface to the serialized representation
 // of a connection object, returning the
 // serialized byte representation and error (if any).
-func SerializeConnection(deserialized interface{}) (serialized []byte, err error) {
+func SerializeConnection(deserialized interface{}) ([]byte, error) {
 	connection, err := castAsConnectionPtr(deserialized)
 	if err != nil {
-		return serialized, err
+		return nil, err
 	}
-	serialized = []byte(fmt.Sprintf("%v\n", connection.String()))
+	serialized := []byte(fmt.Sprintf("%v\n", connection.String()))
 	return serialized, nil
 }
 
 // SerializeConnection attempts to deserialize
 // bytes to a connection object, returning the
 // deserialized connection and error (if any).
-func DeserializeConnection(serialized []byte) (deserialized interface{}, err error) {
+func DeserializeConnection(serialized []byte) (interface{}, error) {
 	connection, err := data.ConnectionFromString(string(serialized))
 	if err != nil {
-		return deserialized, err
+		return nil, err
 	}
-	deserialized = connection
+	deserialized := connection
 	return deserialized, err
 }
 
@@ -43,7 +43,7 @@ type ConnectionFile struct {
 // to a connectionFile at the specified file path,
 // file will lazily be created the first time
 // a read or write is attempted on it.
-func NewConnectionFile(filePath string) (file ConnectionFile) {
+func NewConnectionFile(filePath string) ConnectionFile {
 	sf := &io.SerializedLFile{
 		FilePath:    filePath,
 		Serialize:   SerializeConnection,

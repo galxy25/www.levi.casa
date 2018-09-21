@@ -52,7 +52,7 @@ type Email struct {
 
 // Send sends an email,
 // returning error (if any).
-func (e *Email) Send() (err error) {
+func (e *Email) Send() error {
 	response, err := sesPublisher(e)
 	packageLogger.WithFields(log.Fields{
 		"executor": "Email.#Send",
@@ -66,7 +66,7 @@ func (e *Email) Send() (err error) {
 // returning response and error (if any).
 // Stubbed during unit tests.
 // https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/ses-example-send-email.html
-var sesPublisher = func(email *Email) (response *ses.SendEmailOutput, err error) {
+var sesPublisher = func(email *Email) (*ses.SendEmailOutput, error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(sesRegion)},
 	)
@@ -109,7 +109,7 @@ var sesPublisher = func(email *Email) (response *ses.SendEmailOutput, err error)
 		},
 	}
 	// Attempt to send the email.
-	response, err = svc.SendEmail(input)
+	response, err := svc.SendEmail(input)
 	return response, err
 }
 
@@ -131,7 +131,7 @@ func (s *SMS) Send() (err error) {
 // returning error (if any).
 // Stubbed during unit tests.
 // https://www.twilio.com/blog/2014/06/sending-sms-from-your-go-app.html
-var smsPublisher = func(sms *SMS) (err error) {
+var smsPublisher = func(sms *SMS) error {
 	messagesURI := fmt.Sprintf("%v/%v/Messages.json", twilioBaseEndpoint, twilioSID)
 	urlParams := url.Values{}
 	urlParams.Set("To", sms.Receiver)

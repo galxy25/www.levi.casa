@@ -111,6 +111,90 @@ func ConnectionFromString(raw string) (connection *Connection, err error) {
 	return connection, err
 }
 
+/*
+Content requirements
+	be able to find all links to a link -db layer
+	be able to find all links a link links to -db
+	be able to find all content with a set of tags -db
+	be able to find all content for a set of links -builtin/db
+*/
+
+// Link represents a retrievable
+// piece of content
+type Link struct {
+	URI string `json:"uri"`
+}
+
+/*
+	DB
+		TableName: Links
+		PrimaryKey: LinkID
+		link : {
+			uri:
+			content_ids: [ ]
+		}
+*/
+
+type Context struct {
+	References    []Link   `json:"references"`
+	Comments      []string `json:"comments"`
+	Tags          []string `json:"tags"`
+	ScheduleEpoch int64    `json:"schedule_epoch"`
+}
+
+/*
+	DB
+		TableName: Tags
+		PrimaryKey: TagID
+			OfForm: "TagsForContentID-SetNumber"
+		data:
+			[
+				{
+					tager:
+					tag:
+					tag_epoch:
+				}
+			]
+*/
+
+/*
+	DB
+		TableName: Comments
+		PrimaryKey: CommentID
+			OfForm: "CommentsForContentID-SetNumber"
+		data:
+			[
+				{
+					commenter:
+					comment:
+					comment_epoch:
+					parent:
+				}
+			]
+*/
+
+type Content struct {
+	ID           string  `json:"id"`
+	Sharer       string  `json:"sharer"`
+	Context      Context `json:"context"`
+	PublishEpoch int64   `json:"publish_epoch"`
+}
+
+/*
+	DB
+		TableName: Content
+		PrimaryKey: ContentID
+		data:
+			{
+				CommentSets: 10
+				TagSets: 1
+				ReferenceSets: 5
+				PublishEpoch:
+				ScheduleEpoch:
+				Sharer:
+			}
+*/
+
 // init configures:
 //   Project level logging
 //     Format: JSON

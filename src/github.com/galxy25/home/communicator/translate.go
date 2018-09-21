@@ -24,7 +24,7 @@ var congressPhone = os.Getenv("CONGRESS_PHONE_NUMBER")
 //   if receiver has an '@' character, translate to email
 //   else if receiver begins with '+' character, translate to sms
 //   else "translate" to nil Sender
-func Translate(connection *data.Connection) (sender Sender, err error) {
+func Translate(connection *data.Connection) (Sender, error) {
 	receiver := connection.Receiver
 	emailSigilPresent := strings.ContainsAny(receiver, "@")
 	if emailSigilPresent {
@@ -34,40 +34,36 @@ func Translate(connection *data.Connection) (sender Sender, err error) {
 	if smsSigilPresent {
 		return SmsFromConnection(connection)
 	}
-	err = ErrorUnknownConnectionType
-	return sender, err
+	return nil, ErrorUnknownConnectionType
 }
 
-func EmailFromConnection(connection *data.Connection) (email *Email, err error) {
+func EmailFromConnection(connection *data.Connection) (*Email, error) {
 	if len(connection.Message) == 0 {
-		err = ErrorNoContent
-		return email, err
+		return nil, ErrorNoContent
 	}
-	email = &Email{
+	email := Email{
 		Message:   connection.Message,
 		Sender:    connection.Sender,
 		Receivers: []string{connection.Receiver},
 		Subject:   fmt.Sprintf("%v -> www.levi.casa", connection.Sender),
 	}
-	return email, err
+	return &email, nil
 }
 
-func SmsFromConnection(connection *data.Connection) (sms *SMS, err error) {
+func SmsFromConnection(connection *data.Connection) (*SMS, error) {
 	messageLength := len(connection.Message)
 	if messageLength == 0 {
-		err = ErrorNoContent
-		return sms, err
+		return nil, ErrorNoContent
 	}
 	messagePrefix := fmt.Sprintf("From: %v", connection.Sender)
 	prefixLength := len(messagePrefix)
 	if messageLength+prefixLength > maxSmsLength {
-		err = ErrorSmsMessageLengthExceeded
-		return sms, err
+		return nil, ErrorSmsMessageLengthExceeded
 	}
-	sms = &SMS{
+	sms := SMS{
 		Message:  fmt.Sprintf("%v\n %v", messagePrefix, connection.Message),
 		Sender:   congressPhone,
 		Receiver: connection.Receiver,
 	}
-	return sms, err
+	return &sms, nil
 }

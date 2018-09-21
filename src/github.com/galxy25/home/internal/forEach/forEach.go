@@ -33,14 +33,13 @@ type Predicate func(subject interface{}) (applies bool, err error)
 // selector for each iterated item in a collection
 // returning selected and iteration error(if any)
 // selection stops after the first selection error.
-func Select(forEach ForEach, selector Predicate) (selected chan Each, err error) {
-	selected = make(chan Each)
+func Select(forEach ForEach, selector Predicate) (chan Each, error) {
 	cancel := make(chan struct{}, 1)
 	each, err := forEach(cancel)
 	if err != nil {
-		close(selected)
-		return selected, err
+		return nil, err
 	}
+	selected := make(chan Each)
 	go func() {
 		defer close(selected)
 		for item := range each {
@@ -66,13 +65,14 @@ func Select(forEach ForEach, selector Predicate) (selected chan Each, err error)
 // Detect detects the first item in the
 // collection given for which the predicate holds
 // returning detected item and error(if any).
-func Detect(forEach ForEach, detector Predicate) (detected interface{}, err error) {
+func Detect(forEach ForEach, detector Predicate) (interface{}, error) {
 	cancel := make(chan struct{}, 1)
 	defer close(cancel)
 	each, err := forEach(cancel)
 	if err != nil {
-		return detected, err
+		return nil, err
 	}
+	var detected interface{}
 	for item := range each {
 		if item.Err != nil {
 			continue
