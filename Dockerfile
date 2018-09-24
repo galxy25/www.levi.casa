@@ -2,23 +2,16 @@
 From golang:alpine
 # Install curl so we can use it for health checking
 # containers of this image
-# Install make for running build commands
-# Probably a bit of an overkill versus sh'ing things
-# Install gcc so we can compile go inside the container
-RUN apk add --no-cache curl make gcc g++
-# Copy the server src files to the containers go directory
-ADD ./src /go/src/
-# Copy the client files to the containers web server directory
-ADD ./web /go/web
-# Copy the services build file to the containers working directory
-ADD ./Makefile ./
-# Copy app environment file
-ADD ./Envfile ./
-# Build the home command inside the container.
-RUN make build
+RUN apk add --no-cache curl
+# Copy the server binary over
+COPY ./bin/linux_home /casa/bin/home
+# Copy the client files
+COPY ./web /casa/web
 # Run the home command by default
 # when the container starts.
-ENTRYPOINT /go/bin/home
+WORKDIR /casa
+ENTRYPOINT /casa/bin/home
+#ENTRYPOINT sleep 300
 # Document that the service listens on standard web ports
 EXPOSE 443 80
 # Provide --build-arg HOME_ADDRESS to specify

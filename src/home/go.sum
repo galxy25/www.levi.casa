@@ -1,0 +1,13 @@
+github.com/aws/aws-sdk-go v1.14.8 h1:vO7TW0IyYlGTjs2eWlHbv88uK9kjj8eiadyKEo4GUO4=
+github.com/aws/aws-sdk-go v1.14.8/go.mod h1:ZRmQr0FajVIyZ4ZzBYKG5P3ZqPz9IHG41ZoMu1ADI3k=
+github.com/galxy25/www.levi.casa v0.0.0-20180906014254-889299e24802 h1:0ogbU04x9O8hkHO9fMAjxQ7BpHB+U1k/xddhyobdq/w=
+github.com/go-ini/ini v1.37.0 h1:/FpMfveJbc7ExTTDgT5nL9Vw+aZdst/c2dOxC931U+M=
+github.com/go-ini/ini v1.37.0/go.mod h1:ByCAeIL28uOIIG0E3PJtZPDL8WnHpFKFOtgjp+3Ies8=
+github.com/jmespath/go-jmespath v0.0.0-20160202185014-0b12d6b521d8 h1:12VvqtR6Aowv3l/EQUlocDHW2Cp4G9WJVH7uyH8QFJE=
+github.com/jmespath/go-jmespath v0.0.0-20160202185014-0b12d6b521d8/go.mod h1:Nht3zPeWKUH0NzdCt2Blrr5ys8VGpn0CEB0cQHVjt7k=
+github.com/sirupsen/logrus v1.0.5 h1:8c8b5uO0zS4X6RPl/sd1ENwSkIc0/H2PaHxE3udaE8I=
+github.com/sirupsen/logrus v1.0.5/go.mod h1:pMByvHTf9Beacp5x1UXfOR9xyW/9antXMhjMPG0dEzc=
+golang.org/x/crypto v0.0.0-20180608092829-8ac0e0d97ce4 h1:wviDUSmtheHRBfoY8B9U8ELl2USoXi2YFwdGdpIIkzI=
+golang.org/x/crypto v0.0.0-20180608092829-8ac0e0d97ce4/go.mod h1:6SG95UA2DQfeDnfUPMdvaQW0Q7yPrPDi9nlGo2tz2b4=
+golang.org/x/sys v0.0.0-20180612142214-a9e25c09b96b h1:Alsw3Wc6E7GDN4eBfL2kDsr2kGY3jIK80LVwqVmSQQA=
+golang.org/x/sys v0.0.0-20180612142214-a9e25c09b96b/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=

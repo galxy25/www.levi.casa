@@ -1,44 +1,38 @@
 include Envfile
 export $(shell sed 's/=.*//' Envfile)
 PACKAGE_DIR=src
-ROOT_PACKAGE=github.com/galxy25/home
-GOPATH=$(PWD)
-export GOPATH=$(PWD)
+ROOT_PACKAGE=home
 
-.PHONY: install build clean lint test all start run stop restart rere docker_build docker_build_prod docker_run docker_tag docker_push docker_pull docker_clean
+.PHONY: build cross-compile clean lint test all start run stop restart rere docker_build docker_build_prod docker_run docker_tag docker_push docker_pull docker_clean
 
 lint :
 	echo "Linting"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go fmt ../...; \
-		go vet ../...;
-
-install :
-	echo "Installing"
-	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		dep ensure; \
-		go get;
+		go fmt; \
+		go vet;
 
 build : lint
 	echo "Building"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go install
+		go build
+	mv $(PACKAGE_DIR)/$(ROOT_PACKAGE)/home bin/home
+
+cross-compile : lint
+	echo "Cross compiling for linux"
+	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
+		env GOOS=linux go build
+	mv $(PACKAGE_DIR)/$(ROOT_PACKAGE)/home bin/linux_home
 
 test : lint build
 	echo "Testing"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go test -v -timeout 5s -cover --race -args -project_root=$(PWD); \
-		cd communicator; \
-		go test -v -timeout 10s -cover --race; \
-		cd ../data; \
-		go test -v -timeout 3s -cover --race
+		go test ./... -v -timeout 15s -cover --race
 
 doc :
 	echo "Backgrounding godoc server at http://localhost:2022"
 	nohup godoc -http=:2022 >> godoc.out 2>&1 &
 	echo "Doc yourself, before you wreck yourself:"
-	echo "open http://127.0.0.1:2022/pkg/github.com/galxy25/home/"
-	echo "open http://127.0.0.1:2022/pkg/github.com/galxy25/home/internal/?m=all"
+	echo "open http://127.0.0.1:2022/pkg/home/?m=all"
 
 stop :
 	echo "Stopping web server"
@@ -50,7 +44,7 @@ stop :
 start :
 	echo "Running home web server in background"
 	echo "Appending output to home.out"
-	nohup ./bin/home >> home.out 2>&1 & \
+	nohup bin/home >> home.out 2>&1 & \
 	echo "HOME_PID: $$!"
 
 run : build start
@@ -61,7 +55,7 @@ restart : stop start
 rere : stop run
 	echo "Rebuilding and restarting web server"
 
-docker_build :
+docker_build : cross-compile
 	echo "Building docker image casa from latest source"
 	docker build -t casa --build-arg HOME_ADDRESS=$$HOME_ADDRESS .
 
@@ -71,7 +65,7 @@ docker_build_prod:
 
 docker_run :
 	echo "Running docker image casa:latest"
-	docker run -d -p $$HOME_PORT:$$HOME_PORT/tcp -p $$ACME_PORT:$$ACME_PORT/tcp --mount type=bind,source="$$(pwd)/data",target=/go/data --mount type=bind,source="$$(pwd)/tls",target=/go/tls --env-file Envfile -e AWS_DEFAULT_REGION=$$AWS_DEFAULT_REGION -e AWS_ACCESS_KEY_ID=$$AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$$AWS_SECRET_ACCESS_KEY casa:latest | tail -n 1 | xargs echo > docker.pid
+	docker run -d -p $$HOME_PORT:$$HOME_PORT/tcp -p $$ACME_PORT:$$ACME_PORT/tcp --mount type=bind,source="$$(pwd)/data",target=/casa/data --mount type=bind,source="$$(pwd)/tls",target=/casa/tls --env-file Envfile -e AWS_DEFAULT_REGION=$$AWS_DEFAULT_REGION -e AWS_ACCESS_KEY_ID=$$AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$$AWS_SECRET_ACCESS_KEY casa:latest | tail -n 1 | xargs echo > docker.pid
 		cat docker.pid
 
 docker_stop :
@@ -99,13 +93,11 @@ docker_clean :
 clean :
 	echo "Cleaning"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go clean ../...
-	rm -rf bin/*
-	rm -rf pkg/*
+		go clean
 	rm -f home.out
 	rm -f godoc.out
 	rm -f data/*
 	rm -f docker.pid
 
-all : clean install test doc start
-	echo "Installing, linting, building, testing, doc'ing, starting"
+all : clean build test doc start
+	echo "linting, building, testing, doc'ing, starting"
