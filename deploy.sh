@@ -48,4 +48,4 @@ if [[ ! -d "./data" ]]; then
     "No data directory found, deployment can not proceed"
     exit 1
 fi
-docker run -d -p 80:80/tcp -p 443:443/tcp -v "$(pwd)/data":/data -v "$(pwd)/tls":/tls --env-file Envfile galxy25/www.levi.casa:$NEW
+docker run -d --log-driver json-file --log-opt max-size=10m -p 80:80/tcp -p 443:443/tcp -v "$(pwd)/data":/data -v "$(pwd)/tls":/tls --env-file Envfile galxy25/www.levi.casa:$NEW

@@ -13,6 +13,8 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -46,7 +48,13 @@ var homeEmail = os.Getenv("HOME_EMAIL")
 var homePhone = os.Getenv("HOME_PHONE_NUMBER")
 
 // Universal communicator for receiving and sending connections
-var comm = communicator.NewCommunicator(desiredConnectionsFilePath, currentConnectionsFilePath)
+var comm = communicator.New(desiredConnectionsFilePath, currentConnectionsFilePath)
+
+// The backend server to reverse proxy requests for home vod assets
+var vodReverseProxyURL = os.Getenv("VOD_ORIGIN_SERVER_URL")
+
+// The password required to access the vod server
+var vodPassword = os.Getenv("VOD_PASSWORD")
 
 // Package logging context
 var packageLogger = log.WithFields(log.Fields{
@@ -80,6 +88,9 @@ var Endpoints = map[string]Endpoint{
 		Verb: "GET"},
 	"METRICS": Endpoint{
 		Path: "/stats",
+		Verb: "GET"},
+	"VOD": Endpoint{
+		Path: "/vod/",
 		Verb: "GET"},
 }
 
@@ -266,6 +277,37 @@ func stats(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// vodReverseProxy reverse proxies external requests to the vod server endpoint
+// `/vod?password=somePassword` if the supplied url query param for password is correct
+// (reverse proxy versus separate server because tls & frugality)
+func vodReverseProxy(w http.ResponseWriter, r *http.Request) {
+	queryParams := r.URL.Query()
+	passwordPrompt := []byte(fmt.Sprintf("Please supply the correct vod password as a url query param, e.g. https://%s/vod?password=password", homeAddress))
+	if len(queryParams["password"]) == 0 {
+		log.Printf("vod request with no auth %+v, returning 404\n", r)
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write(passwordPrompt)
+		return
+	}
+	userPassword := queryParams["password"][0]
+	// Not constant time 😬
+	if userPassword != vodPassword {
+		log.Printf("vod request with invalid auth %+v, returning 404\n", r)
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write(passwordPrompt)
+		return
+	}
+	// log.Printf("LEVI: %s userPassword")
+	rpURL, err := url.Parse(vodReverseProxyURL)
+	if err != nil {
+		log.Errorf("error %s trying to parse vodReverseProxyURL %s\n", err, vodReverseProxyURL)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	reverseProxy := httputil.NewSingleHostReverseProxy(rpURL)
+	reverseProxy.ServeHTTP(w, r)
+}
+
 // jsonLoggingHandler wraps an HTTP handler and logs
 // the request and de-serialized JSON body
 func jsonLoggingHandler(h http.Handler) http.Handler {
@@ -318,6 +360,8 @@ func main() {
 	httpd.HandleFunc(Endpoints["NEWSMS"].Path, connect)
 	// Expose an endpoint for inbox requests
 	httpd.HandleFunc(Endpoints["INBOX"].Path, inbox)
+	// Expose an endpoint for reverse proxying requests to vod media server
+	httpd.HandleFunc(Endpoints["VOD"].Path, vodReverseProxy)
 	// If there are any unconnected connections
 	// from a previous run, connect them
 	go func() {

@@ -142,11 +142,11 @@ func (c *Communicator) Reconcile() ([]*data.Connection, error) {
 	return reconciled, err
 }
 
-// NewCommunicator returns a new communicator
+// New returns a new communicator
 // that uses the provided file paths to record
 // and report connections as they are initiated
 // and linked.
-func NewCommunicator(desiredConnectionsFilePath string, currentConnectionsFilePath string) (communicator Communicator) {
+func New(desiredConnectionsFilePath string, currentConnectionsFilePath string) (communicator Communicator) {
 	communicator = Communicator{
 		desiredConnections: NewConnectionFile(desiredConnectionsFilePath),
 		currentConnections: NewConnectionFile(currentConnectionsFilePath),

@@ -27,7 +27,7 @@ func TestSuccesfulLinkRecordsLinkedConnection(t *testing.T) {
 	desired, current := "TestSuccesfulLinkRecordsLinkedConnection.desired", "TestSuccesfulLinkRecordsLinkedConnection.current"
 	defer os.Remove(desired)
 	defer os.Remove(current)
-	comm := NewCommunicator(desired, current)
+	comm := New(desired, current)
 	var sender Sender
 	var err error
 	for connectionType, connectionGenerator := range helper.ConnectionGenerators {
@@ -63,7 +63,7 @@ func TestRecordRecordsConnection(t *testing.T) {
 	desired, current := "TestRecordRecordsConnection.desired", "TestRecordRecordsConnection.current"
 	defer os.Remove(desired)
 	defer os.Remove(current)
-	comm := NewCommunicator(desired, current)
+	comm := New(desired, current)
 	for _, connectionGenerator := range helper.ConnectionGenerators {
 		connection := connectionGenerator()
 		err := comm.Record(connection)
@@ -85,7 +85,7 @@ func TestReceivedReportsAllUnlinkedConnections(t *testing.T) {
 	desired, current := "TestReceivedReportsAllUnlinkedConnections.desired", "TestReceivedReportsAllUnlinkedConnections.current"
 	defer os.Remove(desired)
 	defer os.Remove(current)
-	comm := NewCommunicator(desired, current)
+	comm := New(desired, current)
 	connections := []*data.Connection{
 		helper.RandomEmailConnection(),
 		helper.RandomSmsConnection(),
@@ -136,7 +136,7 @@ func TestSentReportsAllLinkedConnections(t *testing.T) {
 	desired, current := "TestSentReportsAllLinkedConnections.desired", "TestSentReportsAllLinkedConnections.current"
 	defer os.Remove(desired)
 	defer os.Remove(current)
-	comm := NewCommunicator(desired, current)
+	comm := New(desired, current)
 	var sender Sender
 	var err error
 	var allConnections []*data.Connection
@@ -204,7 +204,7 @@ func TestReconcileLinksAllUnlinkedConnections(t *testing.T) {
 	desired, current := "TestReconcileLinksAllUnlinkedConnections.desired", "TestReconcileLinksAllUnlinkedConnections.current"
 	defer os.Remove(desired)
 	defer os.Remove(current)
-	comm := NewCommunicator(desired, current)
+	comm := New(desired, current)
 	var allUnmadeConnections []*data.Connection
 	var sender Sender
 	var err error

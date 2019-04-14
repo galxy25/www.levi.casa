@@ -3,13 +3,14 @@ export $(shell sed 's/=.*//' Envfile)
 PACKAGE_DIR=src
 ROOT_PACKAGE=home
 
-.PHONY: build cross-compile clean lint test all start run stop restart rere docker_build docker_build_prod docker_run docker_tag docker_push docker_pull docker_clean
+.PHONY: all build cross-compile clean lint test test-integeration all start run stop restart rere docker_build docker_build_prod docker_run docker_tag docker_push docker_pull docker_clean docker_push_tag
+
+all: clean build test run test-integeration
 
 lint :
 	echo "Linting"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go fmt; \
-		go vet;
+		go vet ./...; \
 
 build : lint
 	echo "Building"
@@ -23,10 +24,18 @@ cross-compile : lint
 		env GOOS=linux go build
 	mv $(PACKAGE_DIR)/$(ROOT_PACKAGE)/home bin/linux_home
 
-test : lint build
-	echo "Testing"
+test :
+	echo "Unit Testing"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go test ./... -v -timeout 15s -cover --race
+		cd data; \
+			go test -v -timeout 15s -cover --race; \
+	        cd ../communicator; \
+			go test -v -timeout 15s -cover --race
+
+test-integeration :
+	echo "Integeration Testing"
+	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
+		go test -v -timeout 15s -cover --race -count=1
 
 doc :
 	echo "Backgrounding godoc server at http://localhost:2022"
@@ -59,7 +68,7 @@ docker_build : cross-compile
 	echo "Building docker image casa from latest source"
 	docker build -t casa --build-arg HOME_ADDRESS=$$HOME_ADDRESS .
 
-docker_build_prod:
+docker_build_prod: test-integeration cross-compile
 	echo "Building docker image casa_prod from latest source"
 	docker build -t casa_prod --build-arg HOME_ADDRESS=$$PROD_ADDRESS .
 
@@ -83,6 +92,10 @@ docker_push :
 	echo "Pushing all tagged images for galxy25/www.levi.casa"
 	docker push galxy25/www.levi.casa
 
+docker_push_tag :
+	echo "Pushing galxy25/www.levi.casa:$$VERSION"
+	docker push galxy25/www.levi.casa:$$VERSION
+
 docker_pull :
 	docker pull galxy25/www.levi.casa
 
@@ -93,11 +106,9 @@ docker_clean :
 clean :
 	echo "Cleaning"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
+		go mod tidy; \
 		go clean
 	rm -f home.out
 	rm -f godoc.out
 	rm -f data/*
 	rm -f docker.pid
-
-all : clean build test doc start
-	echo "linting, building, testing, doc'ing, starting"

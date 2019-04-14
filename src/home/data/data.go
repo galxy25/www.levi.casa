@@ -4,15 +4,15 @@ package data
 
 import (
 	"encoding/hex"
-	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"os"
 	"strconv"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
-// default anonymous user token, c.g a token's antonym
+// AnonToken is the anonymous user's token, e.g a token's opposite.
 const AnonToken = "antonym"
 
 // Connection represents a static bidirectional communication
@@ -65,37 +65,44 @@ func (c *Connection) Equals(other *Connection) (equal bool) {
 	return equal
 }
 
-func ConnectionFromString(raw string) (connection *Connection, err error) {
+// ConnectionFromString attempts to parse
+// and return a connection object from a string
+// returning parsed connection and error (if any)
+// TODO: refactor as a scan line function for bufio
+// https://golang.org/pkg/bufio/#SplitFunc
+// or replace with a managed key
+// value backend (e.g. a database)
+func ConnectionFromString(raw string) (*Connection, error) {
 	persistedConnection := strings.Split(strings.Replace(raw, "\n", "", -1), " ")
 	// 4 because we expect connections to be serialized
 	// according to the data.Message struct field order.
 	if len(persistedConnection) < 4 {
 		// TODO: Return named error
-		return connection, errors.New(fmt.Sprintf("Invalid persisted connection: %v", persistedConnection))
+		return nil, fmt.Errorf("Invalid persisted connection: %v", persistedConnection)
 	}
 	encodedSender := persistedConnection[0]
 	decodedSender, err := hex.DecodeString(encodedSender)
 	if err != nil {
 		// TODO: Return named error
-		return connection, err
+		return nil, err
 	}
 	encodedReciever := persistedConnection[1]
 	decodedReciever, err := hex.DecodeString(encodedReciever)
 	if err != nil {
 		// TODO: Return named error
-		return connection, err
+		return nil, err
 	}
 	sendEpoch, err := strconv.ParseInt(persistedConnection[2], 10, 64)
 	if err != nil {
 		// TODO: Return named error
-		return connection, err
+		return nil, err
 	}
 	decodedMessage, err := hex.DecodeString(persistedConnection[3])
 	if err != nil {
 		// TODO: Return named error
-		return connection, err
+		return nil, err
 	}
-	connection = &Connection{
+	connection := Connection{
 		Sender:    string(decodedSender),
 		Receiver:  string(decodedReciever),
 		SendEpoch: sendEpoch,
@@ -104,96 +111,75 @@ func ConnectionFromString(raw string) (connection *Connection, err error) {
 		receiveEpoch, err := strconv.ParseInt(persistedConnection[4], 10, 64)
 		if err != nil {
 			// TODO: Return named error
-			return connection, err
+			return nil, err
 		}
 		connection.ReceiveEpoch = receiveEpoch
 	}
-	return connection, err
+	return &connection, err
 }
 
-/*
-Content requirements
-	be able to find all links to a link -db layer
-	be able to find all links a link links to -db
-	be able to find all content with a set of tags -db
-	be able to find all content for a set of links -builtin/db
-*/
+// Phenomenon are a series of
+// cohesive digital events such as a
+// chat, video, or application
+type Phenomenon struct {
+	ID   string `json:"id"`
+	Data []byte `json:"data"`
+}
 
-// Link represents a retrievable
+// A Link is a retrievable
 // piece of content
 type Link struct {
-	URI string `json:"uri"`
+	ID       string   `json:"id"`
+	URI      string   `json:"uri"`
+	Mirrors  []Link   `json:"mirrors"`
+	Inbound  []Link   `json:"inbound"`
+	Outbound []Link   `json:"outbound"`
+	Memories []string `json:"memories"`
 }
 
-/*
-	DB
-		TableName: Links
-		PrimaryKey: LinkID
-		link : {
-			uri:
-			content_ids: [ ]
-		}
-*/
+// A Comment is a comment on a memory
+// by a commenter at at a certain time
+// piece of
+type Comment struct {
+	ID           string `json:"id"`
+	Parent       string `json:"parent"`
+	Commenter    string `json:"commenter"`
+	CommentEpoch int64  `json:"comment_epoch"`
+	Comment      string `json:"comment"`
+}
 
+// A Tag is a user defined key value identifier
+type Tag struct {
+	ID       string `json:"id"`
+	Key      string `json:"key"`
+	Value    string `json:"value"`
+	Tagger   string `json:"tagger"`
+	TagEpoch int64  `json:"tag_epoch"`
+}
+
+// Context contains a collection of digital media
 type Context struct {
-	References    []Link   `json:"references"`
-	Comments      []string `json:"comments"`
-	Tags          []string `json:"tags"`
-	ScheduleEpoch int64    `json:"schedule_epoch"`
+	Links         []Link       `json:"links"`
+	Comments      []Comment    `json:"comments"`
+	Tags          []Tag        `json:"tags"`
+	Phenomenons   []Phenomenon `json:"phenomenons"`
+	ScheduleEpoch int64        `json:"schedule_epoch"`
 }
 
-/*
-	DB
-		TableName: Tags
-		PrimaryKey: TagID
-			OfForm: "TagsForContentID-SetNumber"
-		data:
-			[
-				{
-					tager:
-					tag:
-					tag_epoch:
-				}
-			]
-*/
-
-/*
-	DB
-		TableName: Comments
-		PrimaryKey: CommentID
-			OfForm: "CommentsForContentID-SetNumber"
-		data:
-			[
-				{
-					commenter:
-					comment:
-					comment_epoch:
-					parent:
-				}
-			]
-*/
-
-type Content struct {
-	ID           string  `json:"id"`
-	Sharer       string  `json:"sharer"`
-	Context      Context `json:"context"`
-	PublishEpoch int64   `json:"publish_epoch"`
+type Entity struct {
 }
 
-/*
-	DB
-		TableName: Content
-		PrimaryKey: ContentID
-		data:
-			{
-				CommentSets: 10
-				TagSets: 1
-				ReferenceSets: 5
-				PublishEpoch:
-				ScheduleEpoch:
-				Sharer:
-			}
-*/
+// A Memory represents a
+// relationship between time,
+// entities (people, places, things)
+// and some digital context.
+type Memory struct {
+	ID           string   `json:"id"`
+	PublishEpoch int64    `json:"publish_epoch"`
+	Publisher    string   `json:"Publisher"`
+	Entities     []string `json:"entities"`
+	Context      Context  `json:"context"`
+}
 
 // init configures:
 //   Project level logging
