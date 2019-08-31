@@ -396,7 +396,16 @@ func main() {
 		},
 	}
 	// Run http server to respond to ACME http-01 challenges
-	go http.ListenAndServe(fmt.Sprintf(":%v", acmePort), certManager.HTTPHandler(nil))
+	go func() {
+		err := http.ListenAndServe(fmt.Sprintf(":%v", acmePort), certManager.HTTPHandler(nil))
+		packageLogger.WithFields(log.Fields{
+			"resource": "io/port",
+			"executor": "#main",
+			"port":     homePort,
+			"error":    err.Error(),
+		}).Fatal("failed running ACME http-01 challenge server")
+
+	}()
 	// Run web service for clients
 	// of https://www.levi.casa
 	err := server.ListenAndServeTLS("", "")
@@ -405,6 +414,8 @@ func main() {
 			"resource": "io/port",
 			"executor": "#main",
 			"port":     homePort,
-		}).Fatal("failed to run HTTP server")
+			"error":    err.Error(),
+			"server":   fmt.Sprintf("%+v", server),
+		}).Fatal("failed running HTTP server")
 	}
 }
