@@ -361,6 +361,7 @@ func main() {
 			"resource": "io/port",
 			"executor": "#main",
 			"port":     homePort,
+			"error": err,
 		}).Fatal("failed to run HTTP server")
 	}
 }
