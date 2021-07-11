@@ -3,3 +3,6 @@ data/*.*
 bin/*
 pkg/*
 tls/*
+
+docker.pid
+desired_connections.txt

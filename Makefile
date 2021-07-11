@@ -4,20 +4,15 @@ PACKAGE_DIR=src
 ROOT_PACKAGE=github.com/galxy25/home
 GOPATH=$(PWD)
 export GOPATH=$(PWD)
+VERSION=v0.011
 
-.PHONY: install build clean lint test all start run stop restart rere docker_build docker_build_prod docker_run docker_tag docker_push docker_pull docker_clean
+.PHONY: build clean lint test all start run stop restart rere docker_build docker_build_prod docker_run docker_tag docker_push docker_pull docker_clean
 
 lint :
 	echo "Linting"
 	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		go fmt ../...; \
-		go vet ../...;
-
-install :
-	echo "Installing"
-	cd $(PACKAGE_DIR)/$(ROOT_PACKAGE); \
-		dep ensure; \
-		go get;
+		go fmt ./...; \
+		go vet ./...;
 
 build : lint
 	echo "Building"
@@ -83,11 +78,13 @@ docker_restart : docker_stop docker_run
 
 docker_tag : docker_build_prod
 	@echo "Tagging docker image casa for galxy25/www.levi.casa with tag $$VERSION"
-	@docker tag casa_prod galxy25/www.levi.casa:$$VERSION
+	@docker tag casa_prod galxy25/www.levi.casa:$(VERSION)
 
 docker_push :
 	echo "Pushing all tagged images for galxy25/www.levi.casa"
-	docker push galxy25/www.levi.casa
+	docker push galxy25/www.levi.casa:$(VERSION)
+
+docker_publish: docker_tag docker_push
 
 docker_pull :
 	docker pull galxy25/www.levi.casa
